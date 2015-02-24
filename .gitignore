@@ -1,0 +1,5 @@
+# Pesky pre-revision-control *~ backup files
+*~
+
+# `rustdoc`-generated files
+doc

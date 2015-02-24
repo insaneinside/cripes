@@ -1,0 +1,8 @@
+[package]
+name="cripes"
+version="0.0.1"
+authors=["Collin J. Sutton"]
+
+[lib]
+name="cripes"
+path="src/lib.rs"
