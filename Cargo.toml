@@ -6,3 +6,8 @@ authors=["Collin J. Sutton"]
 [lib]
 name="cripes"
 path="src/lib.rs"
+
+
+[[test]]
+name="test"
+path="test/mod.rs"
