@@ -4,11 +4,12 @@
 /// Panic with a given message unless an expression evaluates to true.
 ///
 /// ## Examples
-/// ```rust
+/// ```should_fail
 /// panic_unless!(1 + 1 == 2, "Math is broken.");
 /// ```
+#[macro_export]
 macro_rules! panic_unless {
-    ($condition:expr, $message:expr) => ({ if ! $condition { panic!($message); } });
+    ($condition:expr, $($rest:expr),+) => ({ if ! $condition { panic!($($rest),+); } });
 }
 
 
