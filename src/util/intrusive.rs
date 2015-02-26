@@ -16,9 +16,8 @@ extern crate core;
 use std;
 use std::fmt;
 use std::mem;
-use std::ptr;
 use std::ptr::PtrExt;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::hash::{Hash, Hasher};
 
 /// Interface for types that can be used with intrusive references.
@@ -186,24 +185,6 @@ impl<T: RefCounted + ?Sized> Deref for Ref<T> {
         }                      
     }
 }
-
-/// **FIXME:** this is NOT in ANY WAY thread-safe!
-/// 
-/// We really should have a separate MutRef<T: AtomicallyRefCounted> for types
-/// that are reliably mutable in a thread-safe fashion.
-
-// impl<T: RefCounted> DerefMut for Ref<T> {
-//     fn deref_mut(&mut self) -> &'a mut T {
-//         match *self {
-//             Ref(None) => panic!("attempted to deref NULL reference"),
-//             Ref(Some(x)) =>  {
-//                 assert!(! x.is_null());
-//                 unsafe { &mut *x }
-//             }
-//         }
-//     }
-// }
-
 
 /* ================================================================
  * impl Drop
