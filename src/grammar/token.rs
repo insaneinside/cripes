@@ -1,26 +1,42 @@
-///! Types and methods for syntax storage and manipulation.
-use ordered;
-use super::symbol;
-use symbol::Symbol;
-
+///! Token traits, variants, and related data structures.
 use std;
 use std::fmt;
+use std::ops::Range;
 use std::default::Default;
-use std::ops::{Deref,Range};
-use std::collections::{HashSet,HashMap};
-use std::vec::Vec;
-
 use std::hash::{Hash, Hasher};
+use std::collections::{LinkedList,HashMap,HashSet};
 
-use super::util;
-use super::util::intrusive;
-use super::util::intrusive::{Ref,RefCounted};
+use symbol;
+use symbol::Symbol;
+use grammar::Rule;
+use grammar::TokenIndex;
+use util::intrusive;
+use util::intrusive::Ref;
+
+/// Per-token data stored in the index.
+struct IndexData {
+    /// Reference to the token itself.
+    token: Ref<Token>,
+
+    /// Rules in which the token appears on the left-hand side.  These rules
+    /// define the token.
+    // FIXME: do we need this?  It may make more sense to store rules in their
+    //     parent LHS nonterminal or synthetic, since terminals (and
+    //     potentially other token types we dream up) don't have rules.
+    rules_for: LinkedList<Rule>,
+
+    /// (rule,vec(position)) pairs for rules that contain the token on their
+    /// right-hand sides.  Rules in this list are used-by relations.
+    rules_containing: LinkedList<(Ref<Rule>,Vec<usize>)>
+}
+
+
 
 /* ****************************************************************
  * Tokens, and their Exquisite Varieties
  */
 /// Data-type used solely to identify the underlying concrete token type.
-pub enum TokenType {
+pub enum Type {
     /// [Terminal](struct.Terminal.html) token.
     Terminal,
     /// [Nonterminal](struct.Nonterminal.html) token.
@@ -72,12 +88,13 @@ pub trait Token:
     Eq +
     fmt::Debug + 
     symbol::Nameable +
-    util::intrusive::ExplicitlySized +
-    util::intrusive::RefCounted +
+    intrusive::ExplicitlySized +
+    intrusive::RefCounted +
     HasFirstSet +
     Repeatable +
     Nullable {
-    fn token_type(&self) -> TokenType;
+    /// Get the underlying token's type.
+    fn token_type(&self) -> Type;
 
     /// Create a SyntheticToken that represents a variable- or fixed-length
     /// number of repetitions of another token.
@@ -96,95 +113,24 @@ impl<T> intrusive::RefCounted for T where T: Token {
 
 
 /* ****************************************************************
- * TokenSpec and TokenIndex
+ * Spec
  */
-/// Provides default values for specifying token parameters to a TokenProvider.
-pub struct TokenSpec<'a> {
-    name: &'a str,
+/// Summary of a token's parameters relevant to its use within a grammar.
+/// Spec is used to find and create tokens in
+/// a [TokenIndex](struct.TokenIndex.html), which also uses it internally as
+/// the key type in mappings to Tokens.
+pub struct Spec {
+    name: Symbol,
     repetitions: Range<usize>,
-    label: Option<&'a str>,
+    label: Option<Symbol>,
     // parent_scope: Ref<Namespace>
 }
 
-
-impl<'a> Default for TokenSpec<'a> {
-    fn default() -> TokenSpec<'a> {
-        TokenSpec{name: "", repetitions: 1..2, label: None}
+impl Default for Spec {
+    fn default() -> Spec {
+        Spec{name: symbol::Inline::new(""), repetitions: 1..2, label: None}
     }
 }
-
-/// Per-scope grammar-data index.
-pub struct TokenIndex {
-    /// All tokens directly within this scope.
-    pub tokens: HashMap<symbol::ID,Ref<Token>>,
-
-    /// Rules for non-terminal tokens in this scope.  
-    pub rules_for: HashMap<symbol::ID,Vec<Rule>>,
-
-    /// Rules containing any token in this scope on their right-hand sides 
-    pub rules_containing: HashMap<symbol::ID,Vec<(Ref<Rule>,Vec<usize>)>>,
-}
-
-impl TokenIndex {
-    /// Find or create a token in this scope.
-    ///
-    /// @param name Name of the token to find or create.
-    pub fn token_by_name(&mut self, name: &str) -> &Token {
-        self.token_by_spec(TokenSpec{name: name, ..Default::default()})
-    }
-
-    /// Find or create a token in this scope. 
-    ///
-    /// @param spec Attributes the returned token should have.
-    pub fn token_by_spec(&mut self, spec: TokenSpec) -> &Token {
-        match self.find_token_by_spec(spec) {
-            Some(tok) => tok,
-            None => self.create_token(spec)
-        }
-    }
-
-    /// Find a token in the current scope by name.
-    fn find_token_by_name(&self, name: &str) -> Option<&Token> {
-        
-    }
-
-    /// Find a token in the current scope by explicitly specifying
-    /// its parameters.
-    fn find_token_by_spec(&self, spec: TokenSpec) -> Option<&Token> {
-        let ref tok = self.tokens[Symbol::hash(spec.name)];
-        None
-    }
-
-    fn create_token(&mut self, spec: TokenSpec) -> &Token {
-        let nonterminal_name = spec.name.chars().all(|c| c.is_lowercase());
-        let terminal_name = spec.name.chars().all(|c| c.is_uppercase());
-    }
-}
-        /* let parts = spec.split(TOKEN_SCOPE_SEPARATOR).collect::<Vec<&str>()>();
-         * for part in parts.drain() {
-         *             
-         *         }
-         *     }             */
-impl intrusive::ExplicitlySized for TokenIndex {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
-}
-
-
-impl Eq for TokenIndex {}
-impl PartialEq<TokenIndex> for TokenIndex
-{
-    fn eq(&self, other: &TokenIndex) -> bool {
-        self.tokens.iter().all(|(k, v)| other.tokens[*k].deref() == (*v).deref())
-    }
-}
-
-impl fmt::Debug for TokenIndex {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
-    }
-}
-
 
 /* ****************************************************************
  * BaseToken -- common base for concrete token variants.
@@ -194,7 +140,7 @@ impl fmt::Debug for TokenIndex {
 #[derive(Debug)]
 pub struct BaseToken {
     order: usize,
-    name: Ref<Symbol>
+    name: Symbol
 }
 
 
@@ -224,11 +170,11 @@ default_refcounted_impl!(BaseToken, refcount);
 #[derive(Debug)]
 pub struct LabeledToken {
     refcount: usize,
-    label: Ref<Symbol>,
+    label: Symbol,
     token: Ref<Token>
 }
 
-impl symbol::Nameable for LabeledToken { fn name(&self) -> Ref<Symbol> { self.token.name() } }
+impl symbol::Nameable for LabeledToken { fn name(&self) -> Symbol { self.token.name() } }
 default_refcounted_impl!(LabeledToken, refcount);
 
 
@@ -248,7 +194,7 @@ pub struct Synthetic {
 
 
 impl Token for Synthetic {
-    fn token_type(&self) -> TokenType { TokenType::Synthetic }    
+    fn token_type(&self) -> Type { Type::Synthetic }    
 }
 
 impl intrusive::ExplicitlySized for Synthetic {
@@ -292,7 +238,7 @@ impl Nullable for Synthetic {
 }
 
 impl HasFirstSet for Synthetic { fn first_set_into(&self, out: &mut Vec<Ref<Token>>) { out.push(self.base.clone()) } }
-impl symbol::Nameable for Synthetic { fn name(&self) -> Ref<Symbol> { self.base.name() } }
+impl symbol::Nameable for Synthetic { fn name(&self) -> Symbol { self.base.name() } }
 // impl HasRootScope<Grammar> for Synthetic { fn root_scope(&self) -> Ref<Grammar> { self.base.root_scope() } }
 // impl HasParentScope<Namespace> for Synthetic { fn parent_scope(&self) -> Ref<Namespace> { self.base.parent_scope() } }
 
@@ -316,7 +262,7 @@ pub struct Terminal {
 
 
 impl Token for Terminal {
-    fn token_type(&self) -> TokenType { TokenType::Terminal }
+    fn token_type(&self) -> Type { Type::Terminal }
 }
 impl intrusive::ExplicitlySized for Terminal {
     fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
@@ -379,12 +325,12 @@ impl Nonterminal {
     
     fn is_superposition(&self) -> bool {
         self.rules.iter().all(|r| r.rhs.len() == 1 && match r.rhs[0].token_type() {
-            TokenType::Terminal => true, _ => false } )
+            Type::Terminal => true, _ => false } )
     }
 
 }
 impl Token for Nonterminal {
-    fn token_type(&self) -> TokenType { TokenType::Nonterminal }
+    fn token_type(&self) -> Type { Type::Nonterminal }
 }
 impl intrusive::ExplicitlySized for Nonterminal {
     fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
@@ -420,122 +366,3 @@ impl PartialEq<Nonterminal> for Nonterminal
             _ => false }
     }
 }
-
-/* ****************************************************************
- * Rule
- */
-
-/// A rule within a grammar.  Each rule defines *one* possible representation of
-/// a particular Nonterminal in terms of a sequence of tokens, which may include
-/// the same Nonterminal.
-pub struct Rule
-{
-    refcount: usize,
-    lhs: intrusive::Ref<Nonterminal>,
-    rhs: Vec<intrusive::Ref<Token>>
-}
-
-impl Rule {
-    /// Find all positions on the rule's right-hand side that a particular
-    /// token appears.  This is useful for e.g. calculating a token's
-    /// follow-set.
-    pub fn rhs_indices_of(&self, tok: &Token) -> Vec<usize>
-    {
-        std::iter::range(0, self.rhs.len()).
-            zip(self.rhs.iter()).
-            filter_map(|(i, rhs_tok)| if rhs_tok == tok { Some(i) } else { None }).
-            collect::<Vec<usize>>()
-    }
-}
-
-impl HasFirstSet for Rule {
-    fn first_set_into(&self, out: &mut Vec<Ref<Token>>) {
-        for tok in self.rhs.iter() {
-            match tok.token_type() {
-                TokenType::Terminal => { out.push((*tok).clone()); break; },
-                _ => { tok.first_set_into(out);
-                       if ! tok.is_nullable() { break; } }
-            }
-        }
-    }
-}
-
-impl Hash for Rule {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.lhs.hash(state);
-        self.rhs.hash(state);
-    }
-}
-
-impl fmt::Debug for Rule {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut r = write!(f, "{:?} ::=", (&*self.lhs as &symbol::Nameable).name());
-        for x in self.rhs.iter() { r = write!(f, " {:?}", *x) }
-        r
-    }
-}
-
-impl Eq for Rule {}
-impl PartialEq<Rule> for Rule {
-    fn eq(&self, other: &Rule) -> bool {
-        self.lhs == other.lhs && self.rhs == other.rhs
-    }
-}
-
-impl intrusive::ExplicitlySized for Rule {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
-}
-
-
-default_refcounted_impl!(Rule, refcount);
-
-/* ****************************************************************
- * Grammar
- */
-/// A set of terminal and nonterminal tokens, and rules that define
-/// their relationships.
-pub struct Grammar {
-    refcount: usize,
-    order_manager: ordered::Manager,
-    index: TokenIndex,
-}
-
-impl Grammar {
-    fn get_scope_index(&self) -> &TokenIndex {
-        &self.index
-    }
-}
-
-impl fmt::Debug for Grammar {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "grammar {{\n"));
-        for (ref sym, ref tok) in self.index.tokens.iter() {
-            for ref rule in self.index.rules_for[**sym].iter() {
-                try!(write!(f, "  {:?}\n", rule))
-            }
-        }
-        write!(f, "}}")
-    }
-}
-
-// impl symbol::scope::HasRootScope<Grammar> for Grammar {
-//   fn root_scope(&self) -> intrusive::Ref<Grammar> {
-//       intrusive::ref_to(self)
-//   }
-// }
-
-impl Eq for Grammar {}
-impl PartialEq<Grammar> for Grammar {
-    fn eq(&self, other: &Grammar) -> bool {
-        self.index == other.index
-    }
-}
-
-impl intrusive::ExplicitlySized for Grammar {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
-}
-
-
-default_refcounted_impl!(Grammar, refcount);
