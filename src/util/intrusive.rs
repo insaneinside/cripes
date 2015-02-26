@@ -1,8 +1,8 @@
 ///! Selected intrusive types, including intrusive references.
-///! 
+///!
 ///! Use of intrusively-reference-counted objects allows easy creation of sharable reference
 ///! allows creation of references to e.g. self:
-///! 
+///!
 ///! ```rust
 ///! use relemon::util::intrusive
 ///! struct Quaternion { w: f64, x: f64, y: f64, z: f64 }
@@ -21,20 +21,20 @@ use std::ptr::PtrExt;
 use std::ops::{Deref, DerefMut};
 use std::hash::{Hash, Hasher};
 
-/// Interface for types that can be used with intrusive references. 
+/// Interface for types that can be used with intrusive references.
 pub trait RefCounted {
     // Create a reference to the current object.
-    fn ref_to_self<T: RefCounted + ?Sized>(&self) -> Ref<T> {
-        ref_to_raw(unsafe{std::mem::transmute::<_,*const T>(self)})
+    fn ref_to_self<T: RefCounted + ExplicitlySized>(&self) -> Ref<T> {
+        ref_to_raw(unsafe{std::mem::transmute(&self)})
     }
 
-    /// Fetch the object's current reference count. 
+    /// Fetch the object's current reference count.
     fn get_refcount(&self) -> usize;
 
-    /// Increment the object's reference count, returning the new value. 
+    /// Increment the object's reference count, returning the new value.
     fn add_ref(&mut self) -> usize;
-   
-    /// Decrement the object's reference count, returning the new value. 
+
+    /// Decrement the object's reference count, returning the new value.
     fn remove_ref(&mut self) -> usize;
 }
 
@@ -77,8 +77,7 @@ pub struct Ref<T: RefCounted + ?Sized>(*const T);
 
 
 
-/// Create an intrusive reference via raw pointer. 
-/// 
+/// Create an intrusive reference via raw pointer.
 /// This method is all *kinds* of unsafe, and should **not** be used from
 /// user code!
 fn ref_to_raw<T: RefCounted + ExplicitlySized>(ptr: *mut T) -> Ref<T> {
@@ -88,14 +87,23 @@ fn ref_to_raw<T: RefCounted + ExplicitlySized>(ptr: *mut T) -> Ref<T> {
     Ref(ptr)
 }
 
+
 /// Move the given value into the heap, and return a Ref to it.  The value
 /// should have a refcount of zero prior to this function.
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust
-/// let x = ref_to_new(42);
+/// #[macro_use]
+/// use cripes::util::intrusive;
+///
+/// #[derive(Debug)]
+/// struct Dog { refcount: usize }
+/// default_refcounted_impl!(Dog);
+/// let x = intrusive::ref_to_new(Dog{refcount: 0});   // x is an intrusive reference to the heap
 /// println!("{:?}", x);
+/// drop(x);                  // dropping the sole reference to that location
+///                           // will free the memory.
 /// ```
 pub fn ref_to_new<U: RefCounted + ExplicitlySized, T: ?Sized + RefCounted + ExplicitlySized>(obj: U) -> Ref<T> {
     let mem = unsafe { mem::transmute::<_,*mut T>(std::boxed::into_raw(Box::new(obj))) };
@@ -118,7 +126,7 @@ impl<T: RefCounted + ExplicitlySized + ?Sized> Ref<T> {
         self.deref().get_refcount()
     }
 
-    /// Check if this refers to the same object as another Ref. 
+    /// Check if this refers to the same object as another Ref.
     pub fn is_same(&self, other: &Ref<T>) -> bool {
         match *self { Ref(x) => match *other { Ref(y) => (x as usize) == (y as usize) } }
     }
