@@ -50,19 +50,19 @@ pub trait ExplicitlySized {
 #[macro_export]
 macro_rules! default_refcounted_impl {
     ($target:ident, $($mbr:ident).*) => (
-        impl RefCounted for $target {
+        impl intrusive::RefCounted for $target {
             fn get_refcount(&self) -> usize { self.$($mbr).* }
             fn add_ref(&mut self) -> usize { self.$($mbr).* += 1; self.$($mbr).* }
             fn remove_ref(&mut self) -> usize { self.$($mbr).* -= 1; self.$($mbr).* }
         });
     ($target:ident<'a>, $($mbr:ident).*) => (
-        impl<'a> RefCounted for $target<'a> {
+        impl<'a> intrusive::RefCounted for $target<'a> {
             fn get_refcount(&self) -> usize { self.$($mbr).* }
             fn add_ref(&mut self) -> usize { self.$($mbr).* += 1; self.$($mbr).* }
             fn remove_ref(&mut self) -> usize { self.$($mbr).* -= 1; self.$($mbr).* }
         });
     (<$typ:ident>, $($mbr:ident).*) => (
-        impl<$typ> RefCounted for $typ {
+        impl<$typ> intrusive::RefCounted for $typ {
             fn get_refcount(&self) -> usize { self.$($mbr).* }
             fn add_ref(&mut self) -> usize { self.$($mbr).* += 1; self.$($mbr).* }
             fn remove_ref(&mut self) -> usize { self.$($mbr).* -= 1; self.$($mbr).* }
