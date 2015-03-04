@@ -1,10 +1,11 @@
-///! Utilities not directly related to parsing, lexing, or
-///! language-manipulation.
+//! Utilities not directly related to parsing, lexing, or
+//! language-manipulation.
 
 /// Panic with a given message unless an expression evaluates to true.
 ///
 /// ## Examples
 /// ```should_fail
+/// #[macro_use] use cripes::util;
 /// panic_unless!(1 + 1 == 2, "Math is broken.");
 /// ```
 #[macro_export]
