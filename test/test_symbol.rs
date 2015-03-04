@@ -52,8 +52,8 @@ fn pooled_pack_unpack() {
 
     let a = pool.symbol(a_str);
     let b = pool.symbol(b_str);
-    assert_eq!(Unpacked::type_of(&a), Type::POOLED);
-    assert_eq!(Unpacked::type_of(&b), Type::POOLED);
+    assert_eq!(a.type_of(), Type::POOLED);
+    assert_eq!(b.type_of(), Type::POOLED);
 
    println!("{:?} => {:?}", a, a.as_slice());
     println!("{:?}", a.unpack());
