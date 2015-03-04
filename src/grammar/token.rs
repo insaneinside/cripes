@@ -1,35 +1,47 @@
-///! Token traits, variants, and related data structures.
+//! Token traits, variants, and related data structures.
 use std;
 use std::fmt;
-use std::ops::Range;
+use std::any::Any;
+use std::raw::TraitObject;
+//use std::ops::Range;
 use std::default::Default;
-use std::hash::{Hash, Hasher};
-use std::collections::{LinkedList,HashMap,HashSet};
+use std::hash::{hash,Hash, Hasher,SipHasher};
+use std::collections::{LinkedList,HashSet};
 
 use symbol;
-use symbol::Symbol;
+use ordered;
+use symbol::{PackFormat,Symbol};
 use grammar::Rule;
 use grammar::TokenIndex;
 use util::intrusive;
-use util::intrusive::Ref;
+use util::intrusive::{Ref,Reference,RefCountHolder};
 
-/// Per-token data stored in the index.
-struct IndexData {
-    /// Reference to the token itself.
-    token: Ref<Token>,
-
+/// Data used to quickly find information related to a particular token.
+#[derive(Debug)]
+pub struct IndexData {
     /// Rules in which the token appears on the left-hand side.  These rules
     /// define the token.
     // FIXME: do we need this?  It may make more sense to store rules in their
     //     parent LHS nonterminal or synthetic, since terminals (and
     //     potentially other token types we dream up) don't have rules.
-    rules_for: LinkedList<Rule>,
+    pub rules_for: Option<Box<LinkedList<Rule>>>,
 
     /// (rule,vec(position)) pairs for rules that contain the token on their
     /// right-hand sides.  Rules in this list are used-by relations.
-    rules_containing: LinkedList<(Ref<Rule>,Vec<usize>)>
+    pub rules_containing: LinkedList<(Ref<Rule>,Vec<usize>)>
 }
 
+impl Default for IndexData {
+    fn default() -> IndexData {
+        IndexData{rules_for: None,
+                  rules_containing: LinkedList::new()}
+    }
+}
+
+/// Trait providing access to a token's index data.
+pub trait Indexed {
+    fn index_data(&self) -> &IndexData;
+}
 
 
 /* ****************************************************************
@@ -42,10 +54,17 @@ pub enum Type {
     /// [Nonterminal](struct.Nonterminal.html) token.
     Nonterminal,
     /// [Synthetic](struct.Synthetic.html) token.
-    Synthetic
+    Synthetic,
+
+    /// [Labeled](struct.LabeledToken.html) token.
+    Labeled
 }
 
 static TOKEN_SCOPE_SEPARATOR: char = ':';
+
+pub trait Typed {
+    fn token_type(&self) -> Type;
+}
 
 
 /// Provides methods to calculate a token's first set.
@@ -77,40 +96,65 @@ pub trait Nullable {
 }
 
 /// A token that may be repeated as a Synthetic.
-pub trait Repeatable {
+pub trait Repeatable: intrusive::RefCounted {
     /// Fetch the repetition range for this token.  
-    fn get_repetitions(&self) -> Range<usize> { 1..2 } /* default 1 */
+    fn get_repetitions(&self) -> std::ops::Range<usize> { 1..2 } /* default 1 */
 }
 
 
+/* ****************************************************************
+ * Token
+ */
 /// Abstract interface to all Token variants.
 pub trait Token:
-    Eq +
     fmt::Debug + 
+    ordered::Ordered +
     symbol::Nameable +
-    intrusive::ExplicitlySized +
     intrusive::RefCounted +
+    Indexed +
     HasFirstSet +
     Repeatable +
     Nullable {
     /// Get the underlying token's type.
     fn token_type(&self) -> Type;
+}
 
-    /// Create a SyntheticToken that represents a variable- or fixed-length
-    /// number of repetitions of another token.
-    fn repeat(&self, range: Range<usize>) -> Synthetic {
-        Synthetic{base: <Self as intrusive::RefCounted>::ref_to_self(), repetitions: range, ..Default::default()}
+
+impl Eq for Token {}
+
+/// We Consider two tokens to be identical if they live at the same address.
+/// This is a complete hack, but will have to do since neither Hash nor
+/// PartialEq are object-safe.
+impl PartialEq<Token> for Token {
+    fn eq(&self, other: &Token) -> bool {
+        use std::mem::transmute;
+        unsafe { transmute::<_,TraitObject>(self).data ==
+                 transmute::<_,TraitObject>(other).data }
+    }
+}
+
+
+/* ****************************************************************
+ * Spec
+ */
+#[derive(Copy,Debug)]
+pub struct Range<T>{start: T, end: T}
+impl<T> Range<T> {
+    pub fn from_range(r: std::ops::Range<T>) -> Range<T> {
+        Range{start: r.start, end: r.end}
     }
 
+    pub fn as_range(&self) -> std::ops::Range<T> where T: Copy {
+        std::ops::Range{start: self.start, end: self.end}
+    }
 }
 
-impl<T> intrusive::RefCounted for T where T: Token {
-    fn get_refcount(&self) -> usize { self.refcount }
-    fn add_ref(&mut self) -> usize { self.refcount += 1; self.refcount }
-    fn remove_ref(&mut self) -> usize { self.refcount -= 1; self.refcount }
+impl<T> Eq for Range<T> where T: Eq {}
+impl<T> PartialEq<Range<T>> for Range<T> where T: Eq {
+    fn eq(&self, other: &Range<T>) -> bool {
+        self.start == other.start && self.end == other.end
+    }
 }
-
-
 
 /* ****************************************************************
  * Spec
@@ -119,16 +163,83 @@ impl<T> intrusive::RefCounted for T where T: Token {
 /// Spec is used to find and create tokens in
 /// a [TokenIndex](struct.TokenIndex.html), which also uses it internally as
 /// the key type in mappings to Tokens.
+#[derive(Copy)]
 pub struct Spec {
-    name: Symbol,
-    repetitions: Range<usize>,
-    label: Option<Symbol>,
+    pub name: Symbol,
+
+    /// Number of occurrences the token should match.  Specifying this value as
+    /// anything other than `1..2` (one repetition) will create
+    /// a Synthetic token.
+    pub repetitions: Range<usize>,
+
+    /// Label for the token.  If not specified, the token will be an
+    /// unlabeled/standard token.
+    pub label: Option<Symbol>,
+
+    // /// Reference to base token to use for synthetic and labeled specs.
+    // /// If this is not specified, one will be automatically selected
+    // /// and/or created.
+    // pub base: Option<Ref<Token>>
     // parent_scope: Ref<Namespace>
+}
+
+impl Spec {
+    /// Determine whether the spec calls for a synthetic (repeated) token.
+    pub fn is_synthetic(&self) -> bool {
+        self.repetitions.as_range() != (1..2)
+    }
+
+    /// Determine whether the spec calls for a labeled token instance.
+    pub fn is_labeled(&self) -> bool {
+        match self.label {
+            Some(..) => true,
+            _ => false }
+    }
+
+
+    /// Determine whether the spec implies the existence of some base token.
+    pub fn requires_base(&self) -> bool {
+        self.is_synthetic() || self.is_labeled()
+    }
+
+    /// Create a copy of this Spec with the topmost modifier (label or
+    /// repetitions) removed.
+    pub fn base_spec(&self) -> Spec {
+        if self.is_labeled()
+        { Spec{name: self.name,
+               repetitions: self.repetitions,
+               ..Default::default()} }
+        else if self.is_synthetic()
+        { Spec{name: self.name,
+               ..Default::default()} }
+        else { *self }
+    }
 }
 
 impl Default for Spec {
     fn default() -> Spec {
-        Spec{name: symbol::Inline::new(""), repetitions: 1..2, label: None}
+        Spec{name: symbol::Inline::new("").pack(),
+             repetitions: Range::from_range(1..2),
+             label: None}
+    }
+}
+
+impl Eq for Spec {}
+
+impl PartialEq<Spec> for Spec {
+    fn eq(&self, other: &Spec) -> bool {
+        self.name == other.name &&
+            self.repetitions == other.repetitions &&
+            self.label == other.label
+    }
+}
+
+impl Hash for Spec {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.repetitions.start.hash(state);
+        self.repetitions.end.hash(state);
+        self.label.hash(state);
     }
 }
 
@@ -139,10 +250,20 @@ impl Default for Spec {
 /// Common data shared by all concrete token types. 
 #[derive(Debug)]
 pub struct BaseToken {
-    order: usize,
-    name: Symbol
+    pub name: Symbol,
+    pub order: usize,
+    pub index: IndexData
 }
 
+impl BaseToken {
+    pub fn new(name: Symbol, order: usize) -> BaseToken {
+        BaseToken{name: name, order: order, index: <IndexData as Default>::default()}
+    }
+}
+
+impl ordered::Ordered for BaseToken {
+    fn get_order(&self) -> usize { self.order }
+}
 
 impl Hash for BaseToken {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -159,7 +280,6 @@ impl PartialEq<BaseToken> for BaseToken
 }
 
 default_nameable_impl!(BaseToken, name);
-default_refcounted_impl!(BaseToken, refcount);
 // default_has_root_scope_impl!(BaseToken, Grammar, parent_scope);
 // default_has_parent_scope_impl!(BaseToken, Namespace, parent_scope);
 
@@ -174,8 +294,15 @@ pub struct LabeledToken {
     token: Ref<Token>
 }
 
+impl LabeledToken {
+    pub fn new(base: Ref<Token>, label: Symbol) -> LabeledToken {
+        LabeledToken{refcount: 1, label: label, token: base}
+    }
+}
+
+impl Indexed for LabeledToken { fn index_data(&self) -> &IndexData { self.token.index_data() } }
 impl symbol::Nameable for LabeledToken { fn name(&self) -> Symbol { self.token.name() } }
-default_refcounted_impl!(LabeledToken, refcount);
+default_refcounted_impl!(LabeledToken);
 
 
 /* **************************************************************** 
@@ -192,31 +319,38 @@ pub struct Synthetic {
     rules: HashSet<Ref<Rule>>
 }
 
-
+impl Synthetic {
+    pub fn new(base: Ref<Token>, repetitions: Range<usize>) -> Synthetic {
+        Synthetic{refcount: 1, base: base, repetitions: repetitions,
+                  rules: HashSet::new()}
+    }
+}
 impl Token for Synthetic {
     fn token_type(&self) -> Type { Type::Synthetic }    
 }
 
-impl intrusive::ExplicitlySized for Synthetic {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
+impl Indexed for Synthetic { fn index_data(&self) -> &IndexData { self.base.index_data() } }
+
+impl ordered::Ordered for Synthetic {
+    fn get_order(&self) -> usize { self.base.get_order() }
 }
 
+
 impl Repeatable for Synthetic {
-    fn get_repetitions(&self) -> Range<usize> {
-        self.repetitions
+    fn get_repetitions(&self) -> std::ops::Range<usize> {
+        self.repetitions.as_range()
     }
 }
 
 impl Default for Synthetic {
     fn default() -> Synthetic {
-        Synthetic{refcount: 0, base: Ref::null(), repetitions: 1..2, rules: HashSet::new()}
+        Synthetic{refcount: 0, base: Ref::null(), repetitions: Range::from_range(1..2), rules: HashSet::new()}
     }
 }
 
 impl Hash for Synthetic {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.base.hash(state);
+        unsafe { self.base.data_id() }.hash(state);
         self.repetitions.start.hash(state);
         self.repetitions.end.hash(state);
         for ref rule in self.rules.iter() { rule.hash(state) }
@@ -227,7 +361,7 @@ impl Eq for Synthetic {}
 impl PartialEq<Synthetic> for Synthetic
 {
     fn eq(&self, other: &Synthetic) -> bool {
-        self.base == other.base && self.repetitions == other.repetitions
+        self.base.data_id() == other.base.data_id() && self.repetitions == other.repetitions
     }
 }
 
@@ -239,6 +373,7 @@ impl Nullable for Synthetic {
 
 impl HasFirstSet for Synthetic { fn first_set_into(&self, out: &mut Vec<Ref<Token>>) { out.push(self.base.clone()) } }
 impl symbol::Nameable for Synthetic { fn name(&self) -> Symbol { self.base.name() } }
+default_refcounted_impl!(Synthetic);
 // impl HasRootScope<Grammar> for Synthetic { fn root_scope(&self) -> Ref<Grammar> { self.base.root_scope() } }
 // impl HasParentScope<Namespace> for Synthetic { fn parent_scope(&self) -> Ref<Namespace> { self.base.parent_scope() } }
 
@@ -260,20 +395,31 @@ pub struct Terminal {
     base: BaseToken,
 }
 
+impl Terminal {
+    pub fn new(sym: Symbol, ord: usize) -> Terminal {
+        Terminal{refcount: 1,
+                 base: BaseToken::new(sym, ord)}
+    }
+}
+
+impl Indexed for Terminal { fn index_data(&self) -> &IndexData { &self.base.index } }
+
+impl ordered::Ordered for Terminal {
+    fn get_order(&self) -> usize { self.base.order }
+}
+
 
 impl Token for Terminal {
     fn token_type(&self) -> Type { Type::Terminal }
 }
-impl intrusive::ExplicitlySized for Terminal {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
-}
+
 
 impl Repeatable for Terminal {}
 impl Nullable for Terminal { fn is_nullable(&self) -> bool { false } }
 impl HasFirstSet for Terminal {
     fn first_set_into(&self, out: &mut Vec<Ref<Token>>)  {
-        out.push(<Self as intrusive::RefCounted>::ref_to_self())
+        let x = Reference::<Token>::from_trait_obj(self);
+        out.push(x);
     }
 }
 
@@ -292,7 +438,7 @@ impl PartialEq<Terminal> for Terminal
 }
 
 default_nameable_impl!(Terminal, base.name);
-// default_refcounted_impl!(Terminal, base.refcount);
+default_refcounted_impl!(Terminal);
 // default_has_root_scope_impl!(Terminal, Grammar, base.parent_scope);
 // default_has_parent_scope_impl!(Terminal, Namespace, base.parent_scope);
 
@@ -307,22 +453,24 @@ pub struct Nonterminal {
     refcount: usize,
     base: BaseToken,
     rules: HashSet<Ref<Rule>>,
-    index: TokenIndex,
+    index: Option<Box<TokenIndex>>,
 }
 
 impl Repeatable for Nonterminal {}
 default_nameable_impl!(Nonterminal, base.name);
-// default_refcounted_impl!(Nonterminal, base.refcount);
+default_refcounted_impl!(Nonterminal);
+
 // default_has_root_scope_impl!(Nonterminal, Grammar, base.parent_scope);
 // default_has_parent_scope_impl!(Nonterminal, Namespace, base.parent_scope);
 
 impl Nonterminal {
-    /// Fetch a reference to the token as a `Namespace`.  If the token is not
-    /// a `Namespace`, returns Ref(None). 
-    fn get_scope_index(&self) -> &TokenIndex {
-        &self.index
+    pub fn new(sym: Symbol, ord: usize) -> Nonterminal {
+        Nonterminal{refcount: 1,
+                    base: BaseToken::new(sym, ord),
+                    rules: HashSet::new(),
+                    index: None}
     }
-    
+
     fn is_superposition(&self) -> bool {
         self.rules.iter().all(|r| r.rhs.len() == 1 && match r.rhs[0].token_type() {
             Type::Terminal => true, _ => false } )
@@ -332,10 +480,13 @@ impl Nonterminal {
 impl Token for Nonterminal {
     fn token_type(&self) -> Type { Type::Nonterminal }
 }
-impl intrusive::ExplicitlySized for Nonterminal {
-    fn get_type_size(&self) -> usize { std::mem::size_of::<Self>() }
-    fn get_type_align(&self) -> usize { std::mem::align_of::<Self>() }
+
+impl Indexed for Nonterminal { fn index_data(&self) -> &IndexData { &self.base.index } }
+
+impl ordered::Ordered for Nonterminal {
+    fn get_order(&self) -> usize { self.base.order }
 }
+
 
 impl Nullable for Nonterminal {
     fn is_nullable(&self) -> bool {
