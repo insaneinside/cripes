@@ -39,7 +39,7 @@ macro_rules! impl_methods {
 
     /* args: (&self, ...) */
     ($body_macro:ident; $method:ident(&self, $($arg:ident: $typ:ty),+) -> $ret:ty, $($rest: tt)*)
-        => (fn $method(&mut self, $($arg: $typ),+) -> $ret { $body_macro!($method; , self, $($arg),+) }
+        => (fn $method(&self, $($arg: $typ),+) -> $ret { $body_macro!($method; , self, $($arg),+) }
             impl_methods!($body_macro; $($rest)*););
 }
 
