@@ -1,6 +1,8 @@
 #![crate_type = "staticlib"]
 #![crate_name = "cripes"]
 
+#![feature(collections)]
+#![feature(core)]
 #![feature(alloc)]
 #![feature(hash)]
 #![feature(unsafe_destructor)]
