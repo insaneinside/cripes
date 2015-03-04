@@ -14,3 +14,9 @@ pub mod util;
 pub mod symbol;
 pub mod grammar;
 pub mod ordered;
+
+
+#[doc(hidden)]
+mod cripes {
+    pub use super::util;
+}
