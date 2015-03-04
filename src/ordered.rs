@@ -1,21 +1,40 @@
+use std::fmt;
+use std::collections::VecMap;
+use std::collections::vec_map::Entry;
 use std::sync::atomic::{AtomicUsize,Ordering};
 
 #[allow(non_camel_case_types)]
 #[derive(Copy)]
-enum Category
-{ CATEGORY_TOKEN = 0,
-  CATEGORY_RULE  = 1,
-  CATEGORY_STATE = 2 }
+pub enum Category
+{ TOKEN = 0,
+  RULE  = 1,
+  STATE = 2 }
 
-pub struct Manager
-{
-    next_order: [AtomicUsize; 3]
+pub trait Ordered {
+    fn get_order(&self) -> usize;
 }
 
-impl Manager
-{
-    fn next_order(&self, c: Category) -> usize
+pub struct Manager {
+    next_order: VecMap<AtomicUsize>
+}
+
+impl Manager {
+    pub fn new() -> Self {
+        Manager{next_order: VecMap::with_capacity(3)}
+    }
+    pub fn next_order(&mut self, c: Category) -> usize
     {
-        self.next_order[c as usize].fetch_add(1, Ordering::SeqCst)
+        match self.next_order.entry(c as usize) {
+            Entry::Vacant(entry) => { entry.insert(AtomicUsize::new(1));
+                                      0 },
+            Entry::Occupied(mut entry) => { let val = entry.get_mut();
+                                            val.fetch_add(1, Ordering::SeqCst) }
+        }
+    }
+}
+
+impl fmt::Debug for Manager {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ordered::Manager{{}}")
     }
 }
