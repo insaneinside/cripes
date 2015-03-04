@@ -10,7 +10,6 @@
 pub mod util;
 
 #[macro_use]
-/** Support for named symbols and symbol tables. */
 pub mod symbol;
 pub mod grammar;
 pub mod ordered;
