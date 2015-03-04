@@ -1,4 +1,4 @@
-#![crate_type = "staticlib"]
+#![crate_type = "rlib"]
 #![crate_name = "cripes"]
 
 #![feature(collections)]
