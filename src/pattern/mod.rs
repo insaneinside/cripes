@@ -1,5 +1,6 @@
 //! Support for patterns of arbitrary element types.
 use std;
+use std::marker::MarkerTrait;
 
 mod walk;
 use self::walk::{action,Action,Walkable,Walker};
