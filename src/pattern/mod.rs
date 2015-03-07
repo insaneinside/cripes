@@ -30,17 +30,14 @@ impl<'a,T> Iterator for Once<'a,T> {
 }
 
 
-use self::PatternWalk::*;
-enum PatternWalk {
-    /// A pattern's first set is the set of elements that may begin a sequence
-    /// matching that pattern.
-    FirstSet,
 
-    /// The atomic first set is like the first set above, but yields only the
-    /// atomic values within the set.
-    AtomicFirstSet
-}
 
+/// A pattern's first set is the set of elements that may begin a sequence
+/// matching that pattern.
+trait FirstSet: MarkerTrait {}
+/// The atomic first set is like the first set above, but yields only the
+/// atomic values within the set.
+trait AtomicFirstSet: MarkerTrait {}
 pub type ElementIterator<'a,T> = Box<Iterator<Item=&'a Element<T>> + 'a>;
 pub type AtomicIterator<'a,T> = Box<Iterator<Item=&'a T> + 'a>;
 
