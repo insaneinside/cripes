@@ -128,7 +128,14 @@ where T: Walkable<Tag,Yielded>, Yielded: Walkable<Tag,Yielded> {
         return None;
     }
 
+    /// We implement `size_hint` as the sum of the hints for the current base-
+    /// and sub-iterators, if they're not `None`.  We return an upper bound
+    /// only if both iterators are `None`.
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (1, None)
+        let mut min = 0;
+        if let Some(iter) = self.sub_iterator { min += iter.size_hint().0 }
+        if let Some(iter) = self.base_iterator { min += iter.size_hint().0 }
+
+        (min, if self.sub_iterator.is_none() && self.base_iterator.is_none() { Some(0) } else { None })
     }
 }
