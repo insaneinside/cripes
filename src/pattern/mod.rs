@@ -83,13 +83,13 @@ struct Sequence<T> {
 }
 
 
-impl<'a,T: 'a> Walkable<AtomicFirstSet,&T> for Sequence<T> {
+impl<'a,T: 'a> Walkable<AtomicFirstSet,&'a T> for Sequence<T> {
     type BaseIterator = std::slice::Iter<'a,Element<T>>;
 
     #[inline(always)]
     fn iter(&self) -> <Self as Walkable<AtomicFirstSet,&T>>::BaseIterator { self.elements.iter() }
 
-    fn action<'a>(&self, element: &'a Element<T>) -> (Option<&T>, u8) {
+    fn action<'b>(&self, element: &'b Element<T>) -> (Option<&T>, u8) {
         match *element {
             Element::Atom(..) =>
                 Action{yield_value: Some(element),
@@ -104,14 +104,14 @@ impl<'a,T: 'a> Walkable<AtomicFirstSet,&T> for Sequence<T> {
 }
 
 
-impl<'a,T: 'a> Walkable<FirstSet,&Element<T>> for Sequence<T> {
+impl<'a,T: 'a> Walkable<FirstSet,&'a Element<T>> for Sequence<T> {
     type BaseIterator = std::slice::Iter<'a,Element<T>>;
 
     #[inline(always)]
     fn iter(&self) -> <Self as Walkable<FirstSet,&Element<T>>>::BaseIterator { self.elements.iter() }
 
     #[inline(always)]
-    fn action<'a>(&self, element: &'a Element<T>) -> (Option<&Element<T>>, u8) {
+    fn action<'b>(&self, element: &'b Element<T>) -> (Option<&Element<T>>, u8) {
         match *element {
             Element::Atom(..) =>
                 Action{yield_value: Some(element),
