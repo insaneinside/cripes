@@ -48,7 +48,7 @@ trait Walkable<Tag,Yielded>: std::marker::PhantomFn<Tag> {
     /// @return Tuple containing the optionally-yielded element, and a set of
     ///     flags indicating how to proceed.  Action::RECURSE is only valid
     ///     when `Item` implements Walkable<Yielded>.
-    fn action<'a>(element: &'a Self::Item) -> Action
+    fn action<'a>(element: &'a Self::Item) -> Self::Action
         where Self::Item: Walkable<Tag,Yielded>;
 }
 
