@@ -104,7 +104,7 @@ where T: Walkable<Tag,Yielded>, Yielded: Walkable<Tag,Yielded> {
                     self.sub_iterator = Some(Walker::new(<Yielded as Walk>::iter(recurse_item)));
 
                     // Recurse immediately if we have no value to yield.
-                    if ! action.yield_value.is_some {
+                    if ! action.yield_value.is_some() {
                         self.next()
                     }
                 }
