@@ -13,10 +13,12 @@ impl Shower for Foo {
     fn show(&self) {
         println!("{}", self.foo);
     }
-    fn bar(x: Ref<Foo>) {
-        x.show();
-    }
 }
+
+fn bar(x: Ref<Foo>) {
+    x.show();
+}
+
 
 #[test]
 fn ref_to_stack() {
