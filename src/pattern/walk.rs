@@ -94,14 +94,14 @@ where T: Walkable<Tag,Yielded>, Yielded: Walkable<Tag,Yielded> {
             } }
         if let Some(ref iter) = self.base_iterator {
             if let Some(ref element) = (*iter).next() {
-                let action = <T as Walk>::action(element);
+                let action = <T as Walkable<Tag,Yielded>>::action(element);
 
                 // FIXME: need to provide a way to specify order in which
                 // to recurse vs. yield.  The solution should allow for
                 // selection of different traversal methods -- need to come
                 // up with an API for that.
                 if let Some(recurse_item) = action.recurse_on {
-                    self.sub_iterator = Some(Walker::new(<Yielded as Walk>::iter(recurse_item)));
+                    self.sub_iterator = Some(Walker::new(<Yielded as Walkable<Tag,Yielded>>::iter(recurse_item)));
 
                     // Recurse immediately if we have no value to yield.
                     if ! action.yield_value.is_some() {
