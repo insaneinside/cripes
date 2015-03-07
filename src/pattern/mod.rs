@@ -38,8 +38,6 @@ trait FirstSet: MarkerTrait {}
 /// The atomic first set is like the first set above, but yields only the
 /// atomic values within the set.
 trait AtomicFirstSet: MarkerTrait {}
-pub type ElementIterator<'a,T> = Box<Iterator<Item=&'a Element<T>> + 'a>;
-pub type AtomicIterator<'a,T> = Box<Iterator<Item=&'a T> + 'a>;
 
 
 /// Provides a method to determine whether a pattern is "nullable", i.e., can
