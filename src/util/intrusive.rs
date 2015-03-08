@@ -337,7 +337,11 @@ where T:  RefCounted + fmt::Debug {
 impl<T: ?Sized> Clone for Ref<T>
 where T: RefCounted {
     fn clone(&self) -> Self {
-        Ref(self.0)
+        match self.0 {
+            RefImpl::Empty => Ref(RefImpl::Empty),
+            RefImpl::Pointer(p) => Ref(RefImpl::Pointer(p)),
+            RefImpl::TraitObject(to) => Ref(RefImpl::TraitObject(to))
+        }
     }
 }
 
