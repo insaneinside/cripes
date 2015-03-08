@@ -32,6 +32,8 @@ impl<'a,T> Iterator for Once<'a,T> {
 
 
 
+/// Interface for descriptions of syntactic patterns.
+pub trait Pattern<T>: Walkable<FirstSet,Element<T>> + Walkable<AtomicFirstSet,T> + Nullable {}
 
 /// A pattern's first set is the set of elements that may begin a sequence
 /// matching that pattern.
@@ -56,10 +58,6 @@ pub enum Element<T> {
     Atom(T),
     Pattern(Box<Pattern<T>>)
 }
-
-
-/// Interface for descriptions of syntactic patterns.
-pub trait Pattern<T>: Walkable<PatternWalk::FirstSet,Element> + Walkable<PatternWalk::AtomicFirstSet,T> + Nullable {}
 
 impl<'a,T> Nullable for Element<T> {
     fn is_nullable(&self) -> bool {
