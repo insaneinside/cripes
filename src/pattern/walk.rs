@@ -32,8 +32,6 @@ pub use self::action::Action;
 trait Walkable<Tag,Yielded>: std::marker::PhantomFn<Tag> {
     /// Iterator type for the implementer's underlying container.
     type BaseIterator;
-    type Item = <Self::BaseIterator as Iterator>::Item;
-    type Action = Action<Yielded,Self::Item>;
 
     /// Fetch the initial iterator to use for a walk.
     fn iter(&self) -> Self::BaseIterator;
@@ -46,8 +44,9 @@ trait Walkable<Tag,Yielded>: std::marker::PhantomFn<Tag> {
     /// @return Tuple containing the optionally-yielded element, and a set of
     ///     flags indicating how to proceed.  Action::RECURSE is only valid
     ///     when `Item` implements Walkable<Yielded>.
-    fn action<'a>(element: &'a Self::Item) -> Self::Action
-        where Self::Item: Walkable<Tag,Yielded>;
+    fn action<'a>(element: &'a <Self::BaseIterator as Iterator>::Item)
+                  -> Action<Yielded,<Self::BaseIterator as Iterator>::Item>
+        where <Self::BaseIterator as Iterator>::Item: Walkable<Tag,Yielded>;
 }
 
 // FIXME: should the order of `T` and `Yielded` be reversed?
