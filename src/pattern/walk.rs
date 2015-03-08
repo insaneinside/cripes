@@ -12,7 +12,7 @@ pub mod action {
 
     pub use self::Flag::*;
 
-    struct Action<U,V> {
+    pub struct Action<U,V> {
         yield_value: Option<U>,
         recurse_on: Option<V>,
         flags: u8
