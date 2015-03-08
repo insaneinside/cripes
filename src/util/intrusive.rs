@@ -215,7 +215,7 @@ impl<T: ?Sized> Ref<T> where T: RefCounted {
     /// primarily for implementing hashes over trait objects (the standard
     /// library's Hash is not object-safe) by simply hashing the instance's
     /// data pointer.
-    pub unsafe fn data_id(&self) -> usize {
+    pub fn data_id(&self) -> usize {
         match self.0 {
             RefImpl::Empty => 0,
             RefImpl::Pointer(p) => p as usize,
