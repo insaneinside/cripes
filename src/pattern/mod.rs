@@ -1,6 +1,6 @@
 //! Support for patterns of arbitrary element types.
 use std;
-use std::marker::MarkerTrait;
+use std::marker::{MarkerTrait,PhantomData};
 
 mod walk;
 use self::walk::{action,Action,Walkable,Walker};
@@ -37,10 +37,10 @@ pub trait Pattern<T>: Walkable<FirstSet,Element<T>> + Walkable<AtomicFirstSet,T>
 
 /// A pattern's first set is the set of elements that may begin a sequence
 /// matching that pattern.
-trait FirstSet: MarkerTrait {}
+pub struct FirstSet { _marker: PhantomData<u8> }
 /// The atomic first set is like the first set above, but yields only the
 /// atomic values within the set.
-trait AtomicFirstSet: MarkerTrait {}
+pub struct AtomicFirstSet { _marker: PhantomData<u8>}
 
 
 /// Provides a method to determine whether a pattern is "nullable", i.e., can
