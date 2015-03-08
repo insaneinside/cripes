@@ -307,9 +307,13 @@ impl<T: ?Sized> fmt::Display for Ref<T>
 where T: RefCounted + fmt::Display {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.0 {
+            RefImpl::Empty => write!(f, ""),
             RefImpl::Pointer(p) => { assert!(! (p == 0 as *const T));
                                      let val: &T = (*self).deref();
-                                     val.fmt(f) } }
+                                     val.fmt(f) },
+            RefImpl::TraitObject(to) => { let x: &T = unsafe { std::mem::transmute(to) };
+                                          x.fmt(f) }
+        }
     }
 }
 
