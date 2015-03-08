@@ -13,11 +13,9 @@ pub mod util;
 
 #[macro_use]
 pub mod symbol;
-pub mod grammar;
+pub mod pattern;
+//pub mod grammar;
 pub mod ordered;
 
-
-#[doc(hidden)]
-mod cripes {
-    pub use super::util;
-}
+//#[doc(hidden)]
+//mod cripes { pub use super::util; }
