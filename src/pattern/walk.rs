@@ -30,7 +30,7 @@ pub use self::action::Action;
 ///
 /// @tparam Yielded Type of item the walkable should implement an iterator for.
 trait Walkable<Tag,Yielded>: std::marker::PhantomFn<Tag> {
-    /// Iterator type that for the implementer's underlying container.
+    /// Iterator type for the implementer's underlying container.
     type BaseIterator;
     type Item = <Self::BaseIterator as Iterator>::Item;
     type Action = Action<Yielded,Self::Item>;
