@@ -265,7 +265,7 @@ where T: RefCounted {
     fn deref(&self) -> &T {
         match self.0 {
             RefImpl::Empty => panic!("tried to deref from an empty reference"),
-            RefImpl::Pointer(ptr) => &*ptr,
+            RefImpl::Pointer(ptr) => unsafe { &*ptr },
             RefImpl::TraitObject(ref obj) => unsafe { std::mem::transmute(obj) }
         }
     }
