@@ -2,8 +2,6 @@
 
 use std;
 
-#[repr(u8)]
-
 /// Descriptions of actions that may be taken on a given node when traversing
 /// a pattern tree.
 pub mod action {
