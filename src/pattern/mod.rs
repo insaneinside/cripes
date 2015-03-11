@@ -1,46 +1,45 @@
 //! Support for patterns of arbitrary element types.
 use std;
-use std::marker::{MarkerTrait,PhantomData};
+use std::marker::{PhantomData};
 
 mod walk;
-use self::walk::{action,Action,Walkable,Walker};
+mod iter;
 
-/// An iterator that produces its input item exactly once.
-struct Once<'a,T: 'a>(Option<&'a T>);
-
-impl<'a,T> Once<'a,T> {
-    fn new(obj: &'a T) -> Once<'a,T> {
-        Once(Some(obj))
-    }
-}
-
-impl<'a,T> Iterator for Once<'a,T> {
-    type Item = &'a T;
-    fn next(&mut self) -> Option<&'a T> {
-        let out = self.0;
-        self.0 = None;
-        out
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self.0 {
-            Some(..) => (1, Some(1)),
-            None => (0, Some(0))
-        }
-    }
-}
-
-
+use self::walk::*;
+use self::iter::*;
 
 /// Interface for descriptions of syntactic patterns.
-pub trait Pattern<T>: Walkable<FirstSet,Element<T>> + Walkable<AtomicFirstSet,T> + Nullable {}
+pub trait Pattern<'a,T>:
+    Walkable<'a,FirstSet<T>> +
+    Walkable<'a,AtomicFirstSet<T>> +
+    Nullable + std::fmt::Debug
+where T: Copy + std::fmt::Debug {}
+
+/// Provides additional helper methods for implementers of Pattern<'a,T>.
+pub trait PatternExt<'a,T>: Pattern<'a,T> {
+    fn walk<W: 'a + WalkType>(&'a self) -> Walker<'a,W>
+        where Self: Sized + Walkable<'a,W>,
+              <W as WalkType>::Item: 'a {
+        Walker::new(self)
+    }
+}
 
 /// A pattern's first set is the set of elements that may begin a sequence
 /// matching that pattern.
-pub struct FirstSet { _marker: PhantomData<u8> }
+pub struct FirstSet<T> { _marker: PhantomData<T> }
+
+impl<'a,T> WalkType for FirstSet<T> {
+    type Yield = &'a Element<'a,T>;
+    type Item = &'a Element<'a,T>;
+}
+
 /// The atomic first set is like the first set above, but yields only the
 /// atomic values within the set.
-pub struct AtomicFirstSet { _marker: PhantomData<u8>}
+pub struct AtomicFirstSet<T> { _marker: PhantomData<T>}
+impl<'a,T> WalkType for AtomicFirstSet<T>  {
+    type Yield = T;
+    type Item = &'a Element<'a,T>;
+}
 
 
 /// Provides a method to determine whether a pattern is "nullable", i.e., can
@@ -51,15 +50,44 @@ pub trait Nullable {
 }
 
 
-
+/* **************************************************************** */
 /// A component in a pattern.  Each element is either an atomic value, or
 /// a Pattern trait object.
-pub enum Element<T> {
+#[derive(Debug)]
+pub enum Element<'a,T> {
     Atom(T),
-    Pattern(Box<Pattern<T>>)
+    Pattern(Box<Pattern<'a,T>>)
 }
 
-impl<'a,T> Nullable for Element<T> {
+//impl<'a,T> Iterable<'a, IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>> for Element<'a,T>
+impl<'a,T> Iterable<'a, Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a>> for Element<'a,T>
+where T: 'a {
+    #[inline(always)]
+    fn iter(&'a self) -> Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> /*IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>*/ {
+        Box::new(Once::new(self))
+    }
+}
+
+impl<'a,T> Walkable<'a,FirstSet<T>> for Element<'a,T>
+where T: 'a {
+    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<FirstSet<T>> {
+        match *element {
+            Element::Atom(..) => Action::new(Some(element), false, action::TERMINATE as u8),
+            Element::Pattern(..) => Action::new(Some(element), true, action::TERMINATE as u8)
+        }
+    }
+}
+
+impl<'a,T> Walkable<'a,AtomicFirstSet<T>> for Element<'a,T> where T: 'a + Copy {
+    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<AtomicFirstSet<T>> {
+        match *element {
+            Element::Atom(atom) => Action::new(Some(atom), false, action::TERMINATE as u8),
+            Element::Pattern(..) => Action::new(None, true, action::TERMINATE as u8)
+        }
+    }
+}
+
+impl<'a,T> Nullable for Element<'a,T> {
     fn is_nullable(&self) -> bool {
         match *self {
             Element::Atom(..) => false,
@@ -68,65 +96,68 @@ impl<'a,T> Nullable for Element<T> {
     }
 }
 
-            
 
 
+/* **************************************************************** */
 /// A sequence of atoms or subpatterns.
-struct Sequence<T> {
-    elements: Vec<Element<T>>
+#[derive(Debug)]
+pub struct Sequence<'a,T> {
+    elements: Vec<Element<'a,T>>
 }
 
+impl<'a,T> Sequence<'a,T> {
+    pub fn new(elements: Vec<Element<'a,T>>) -> Sequence<'a,T> {
+        Sequence{elements: elements}
+    }
+}
 
-impl<'a,T: 'a> Walkable<AtomicFirstSet,&'a T> for Sequence<T> {
-    type BaseIterator = std::slice::Iter<'a,Element<T>>;
+impl<'a,T> Pattern<'a,T> for Sequence<'a,T> where T: 'a + Copy + std::fmt::Debug {}
 
+
+//impl<'a,T> Iterable<'a,IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>> for Sequence<'a,T>
+impl<'a,T> Iterable<'a,Box<Iterator<Item=<FirstSet<T> as WalkType>::Item>>> for Sequence<'a,T>
+where T: 'a {
     #[inline(always)]
-    fn iter(&self) -> <Self as Walkable<AtomicFirstSet,&T>>::BaseIterator { self.elements.iter() }
+    fn iter(&'a self) -> Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> {
+        Box::new(self.elements.iter())
+    }
+}
 
-    fn action<'b>(&self, element: &'b Element<T>) -> (Option<&T>, u8) {
+// TODO: impl<'a,T> Sequence<'a,T>
+
+impl<'a,T> Walkable<'a,AtomicFirstSet<T>> for Sequence<'a,T> where T: 'a + Copy {
+    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
-            Element::Atom(..) =>
-                Action{yield_value: Some(element),
-                       recurse_on: None,
-                       flags: action::TERMINATE},
+            Element::Atom(atom) =>
+                Action::new(Some(atom), false, action::TERMINATE as u8),
             Element::Pattern(ref pat) =>
-                Action{yield_value: None,
-                       recurse_on: Some(element),
-                       flags: if pat.is_nullable() { 0 } else { action::TERMINATE }}
+                Action::new(None, true, if pat.is_nullable() { 0 } else { action::TERMINATE as u8 })
         }
     }
 }
 
 
-impl<'a,T: 'a> Walkable<FirstSet,&'a Element<T>> for Sequence<T> {
-    type BaseIterator = std::slice::Iter<'a,Element<T>>;
-
+impl<'a,T> Walkable<'a,FirstSet<T>> for Sequence<'a,T>
+where T: 'a {
     #[inline(always)]
-    fn iter(&self) -> <Self as Walkable<FirstSet,&Element<T>>>::BaseIterator { self.elements.iter() }
-
-    #[inline(always)]
-    fn action<'b>(&self, element: &'b Element<T>) -> (Option<&Element<T>>, u8) {
+    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<FirstSet<T>> {
         match *element {
             Element::Atom(..) =>
-                Action{yield_value: Some(element),
-                       recurse_on: None,
-                       flags: action::TERMINATE},
+                Action::new(Some(element), false, action::TERMINATE as u8),
             Element::Pattern(ref pat) =>
-                Action{yield_value: Some(element),
-                       recurse_on: Some(element),
-                       flags: if pat.is_nullable() { 0 } else { action::TERMINATE }}
+                Action::new(Some(element), true, if pat.is_nullable() { 0 } else { action::TERMINATE as u8 })
         }
     }
 }
 
-impl<T> Nullable for Sequence<T> {
+impl<'a,T> Nullable for Sequence<'a,T> {
     fn is_nullable(&self) -> bool {
         if self.elements.is_empty() { true }
         else {
             for elt in self.elements.iter() {
                 match *elt {
                     Element::Atom(..) => return false,
-                    Element::Pattern(pat) => if ! pat.is_nullable() { return false; }
+                    Element::Pattern(ref pat) => if ! pat.is_nullable() { return false; }
                 }
             }
             true
