@@ -59,7 +59,7 @@ fn pooled_pack_unpack() {
     println!("{:?}", a.unpack());
 
     assert_eq!(a, a);
-    assert_ne!(a, b);
+    panic_unless!(a != b && b != a, "`a` and `b` are distinct symbols and should not be equal");
     assert_eq!(a.as_slice(), a_str);
     assert_eq!(b.as_slice(), b_str);
 }
