@@ -109,14 +109,14 @@ where Type: 'a + WalkType,
             // If the sub-iterator exists and isn't exhausted, return its
             // yielded value...
             if let Some(ref mut iter) = self.sub_iterator {
-                let yielded_opt = (*iter).next();
+                let yielded_opt = iter.next();
                 if yielded_opt.is_some() {
                     return yielded_opt }
             }
             // ...otherwise clear it and check if the base iterator exists
             self.sub_iterator = None;
             if let Some(ref mut iter) = self.base_iterator {
-                if let Some(ref element) = (*iter).next() {
+                if let Some(ref element) = iter.next() {
                     let action = self.walkable.action(*element);
 
                     // FIXME: need to provide a way to specify order in which
