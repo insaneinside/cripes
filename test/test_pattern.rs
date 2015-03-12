@@ -1,6 +1,7 @@
 use std::vec::Vec;
 
 use cripes::pattern::*;
+use cripes::pattern::iter::*;
 
 /// Test the `Once` iterator.
 #[test]
@@ -18,7 +19,7 @@ fn test_once() {
 
     n = 0;
     for something in things.iter() {
-        for thing in Once::new(something) { n += 1 }
+        for _ in Once::new(something) { n += 1 }
     }
     assert_eq!(n, 26);
 }

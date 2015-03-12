@@ -2,8 +2,8 @@
 use std;
 use std::marker::{PhantomData};
 
-mod walk;
-mod iter;
+pub mod walk;
+pub mod iter;
 
 use self::walk::*;
 use self::iter::*;
@@ -15,22 +15,13 @@ pub trait Pattern<'a,T>:
     Nullable + std::fmt::Debug
 where T: Copy + std::fmt::Debug {}
 
-/// Provides additional helper methods for implementers of Pattern<'a,T>.
-pub trait PatternExt<'a,T>: Pattern<'a,T> {
-    fn walk<W: 'a + WalkType>(&'a self) -> Walker<'a,W>
-        where Self: Sized + Walkable<'a,W>,
-              <W as WalkType>::Item: 'a {
-        Walker::new(self)
-    }
-}
-
 /// A pattern's first set is the set of elements that may begin a sequence
 /// matching that pattern.
 pub struct FirstSet<T> { _marker: PhantomData<T> }
 
 impl<'a,T> WalkType for FirstSet<T> {
     type Yield = &'a Element<'a,T>;
-    type Item = &'a Element<'a,T>;
+    type Item = Element<'a,T>;
 }
 
 /// The atomic first set is like the first set above, but yields only the
@@ -38,7 +29,7 @@ impl<'a,T> WalkType for FirstSet<T> {
 pub struct AtomicFirstSet<T> { _marker: PhantomData<T>}
 impl<'a,T> WalkType for AtomicFirstSet<T>  {
     type Yield = T;
-    type Item = &'a Element<'a,T>;
+    type Item = Element<'a,T>;
 }
 
 
@@ -59,18 +50,22 @@ pub enum Element<'a,T> {
     Pattern(Box<Pattern<'a,T>>)
 }
 
+impl<'a,T> WalkableExt for Element<'a,T> {}
+
+impl<'a,T> Pattern<'a,T> for Element<'a,T> where T: 'a + Copy + std::fmt::Debug {}
+
 //impl<'a,T> Iterable<'a, IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>> for Element<'a,T>
-impl<'a,T> Iterable<'a, Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a>> for Element<'a,T>
+impl<'a,T> Iterable<'a, Box<Iterator<Item=&'a <FirstSet<T> as WalkType>::Item>>> for Element<'a,T>
 where T: 'a {
     #[inline(always)]
-    fn iter(&'a self) -> Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> /*IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>*/ {
+    fn iter(&'a self) -> Box<Iterator<Item=&'a Element<'a,T>> + 'a> {//Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> /*IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>*/ {
         Box::new(Once::new(self))
     }
 }
 
 impl<'a,T> Walkable<'a,FirstSet<T>> for Element<'a,T>
 where T: 'a {
-    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<FirstSet<T>> {
+    fn action(&'a self, element: &'a <FirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
         match *element {
             Element::Atom(..) => Action::new(Some(element), false, action::TERMINATE as u8),
             Element::Pattern(..) => Action::new(Some(element), true, action::TERMINATE as u8)
@@ -79,7 +74,7 @@ where T: 'a {
 }
 
 impl<'a,T> Walkable<'a,AtomicFirstSet<T>> for Element<'a,T> where T: 'a + Copy {
-    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<AtomicFirstSet<T>> {
+    fn action(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
             Element::Atom(atom) => Action::new(Some(atom), false, action::TERMINATE as u8),
             Element::Pattern(..) => Action::new(None, true, action::TERMINATE as u8)
@@ -115,10 +110,10 @@ impl<'a,T> Pattern<'a,T> for Sequence<'a,T> where T: 'a + Copy + std::fmt::Debug
 
 
 //impl<'a,T> Iterable<'a,IterBox<'a,&'a <FirstSet<T> as WalkType>::Item>> for Sequence<'a,T>
-impl<'a,T> Iterable<'a,Box<Iterator<Item=<FirstSet<T> as WalkType>::Item>>> for Sequence<'a,T>
+impl<'a,T> Iterable<'a,Box<Iterator<Item=&'a <FirstSet<T> as WalkType>::Item>>> for Sequence<'a,T>
 where T: 'a {
     #[inline(always)]
-    fn iter(&'a self) -> Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> {
+    fn iter(&'a self) -> Box<Iterator<Item=&'a <FirstSet<T> as WalkType>::Item> + 'a> {
         Box::new(self.elements.iter())
     }
 }
@@ -126,7 +121,7 @@ where T: 'a {
 // TODO: impl<'a,T> Sequence<'a,T>
 
 impl<'a,T> Walkable<'a,AtomicFirstSet<T>> for Sequence<'a,T> where T: 'a + Copy {
-    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<AtomicFirstSet<T>> {
+    fn action(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
             Element::Atom(atom) =>
                 Action::new(Some(atom), false, action::TERMINATE as u8),
@@ -140,7 +135,7 @@ impl<'a,T> Walkable<'a,AtomicFirstSet<T>> for Sequence<'a,T> where T: 'a + Copy 
 impl<'a,T> Walkable<'a,FirstSet<T>> for Sequence<'a,T>
 where T: 'a {
     #[inline(always)]
-    fn action(&'a self, element: &'a Element<'a,T>) -> walk::Action<FirstSet<T>> {
+    fn action(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
         match *element {
             Element::Atom(..) =>
                 Action::new(Some(element), false, action::TERMINATE as u8),

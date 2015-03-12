@@ -21,7 +21,7 @@ pub mod action {
         pub flags: u8
     }
 
-    impl<Type> Action<Type> where Type: WalkType {
+    impl<'a,Type> Action<Type> where Type: WalkType, <Type as WalkType>::Item: super::Walkable<'a,Type> {
         pub fn new(y: Option<<Type as WalkType>::Yield>, r: bool, f: u8) -> Action<Type> {
             Action{yield_value: y, recurse: r, flags: f}
         }
@@ -36,6 +36,7 @@ pub trait WalkType {
     type Yield;
 
     /// Value produced by base iterators for the container being walked.
+    /// This should generally *not* include a reference!
     type Item;
 }
 
@@ -44,23 +45,27 @@ pub trait WalkType {
 /// Interface for patterns whose elements may be visited in
 /// a runtime-specified manner.
 ///
-/// @tparam Type Marker type used to discriminate the "type" of walk being
-///     implemented.  A particular type may be walked for different purposes,
-///     such as to visit *all* elements, or only certain ones.
-///
-/// @tparam 
-pub trait Walkable<'a,Type>: Iterable<'a,Box<Iterator<Item=<Type as WalkType>::Item>>> /*Iterable<'a,IterBox<'a,&'a <Type as WalkType>::Item>>*/
-where Type: WalkType {
+/// @tparam Type Walk type this trait works with.
+pub trait Walkable<'a,Type: WalkType>: Iterable<'a,Box<Iterator<Item=&'a <Type as WalkType>::Item>>> {
     /// Determine the action to take for a given node in the implementor's
     /// element tree.
     ///
     /// @param element Pattern element to process.
     ///
-    /// @return Tuple containing the optionally-yielded element, and a set of
-    ///     flags indicating how to proceed.  Action::RECURSE is only valid
-    ///     when `Item` implements Walkable<Tag>.
-    fn action(&'a self, element: <Type as WalkType>::Item)
+    /// @return Structure describing the action to be performed for the
+    ///     given element.
+    fn action(&'a self, element: &'a <Type as WalkType>::Item)
                   -> Action<Type>;
+}
+
+/// Provides additional helper methods for implementers of a particular walk type.
+pub trait WalkableExt {
+    fn walk<'a,W>(&'a self) -> Walker<'a,W>
+        where Self: Sized + Walkable<'a,W>,
+              W: WalkType,
+              <W as WalkType>::Item: 'a {
+        Walker::new(self)
+    }
 }
 
 /// Iterator used to perform a particular walk on a particular type.
@@ -76,10 +81,8 @@ pub struct Walker<'a,Type>
           <Type as WalkType>::Item: 'a {
 
     walkable: &'a Walkable<'a,Type>,
-    base_iterator: Option<Box<Iterator<Item=<Type as WalkType>::Item> + 'a>>,
-    //base_iterator: Option<IterBox<'a,&'a <Type as WalkType>::Item>>,
+    base_iterator: Option<Box<Iterator<Item=&'a <Type as WalkType>::Item> + 'a>>,
     sub_iterator: Option<Box<Iterator<Item=<Type as WalkType>::Yield> + 'a>>
-    //sub_iterator: Option<IterBox<'a,<Type as WalkType>::Yield>>
 }
 
 impl<'a,Type> Walker<'a,Type>
@@ -96,7 +99,7 @@ impl<'a,Type> Walker<'a,Type>
 impl<'a,Type> Iterator for Walker<'a,Type>
 where Type: 'a + WalkType,
       <Type as WalkType>::Yield: 'a,
-      <Type as WalkType>::Item: 'a + Iterable<'a,Box<Iterator<Item=<Type as WalkType>::Yield>+'a>> + Walkable<'a,Type>,/*Iterable<'a,IterBox<'a,<Type as WalkType>::Yield>> + Walkable<'a,Type>*/
+      <Type as WalkType>::Item: 'a + WalkableExt + Walkable<'a,Type>,
 {
     type Item = <Type as WalkType>::Yield;
 
@@ -124,7 +127,7 @@ where Type: 'a + WalkType,
                     // selection of different traversal methods -- need to come
                     // up with an API for that.
                     if action.recurse {
-                        self.sub_iterator = Some(Box::new(Walker::new(element as &Walkable<'a,Type>)));
+                        self.sub_iterator = Some(Box::new(element.walk::<Type>()));
 
                         // Recurse immediately if we have no value to yield.
                         if ! action.yield_value.is_some() {
