@@ -4,9 +4,18 @@
 /// Panic with a given message unless an expression evaluates to true.
 ///
 /// ## Examples
-/// ```should_fail
-/// #[macro_use] use cripes::util;
+/// ```rust
+/// # #[macro_use] extern crate cripes;
+/// # fn main() {
 /// panic_unless!(1 + 1 == 2, "Math is broken.");
+/// # }
+/// ```
+///
+/// ```rust,should_panic
+/// # #[macro_use] extern crate cripes;
+/// # fn main() {
+/// panic_unless!(true == false, "I'm broken.");
+/// # }
 /// ```
 #[macro_export]
 macro_rules! panic_unless {
