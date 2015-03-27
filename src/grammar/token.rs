@@ -67,8 +67,6 @@ pub trait Typed {
 }
 
 
-/// Provides methods to calculate a token's first set.
-///
 /// A compound token's first set is defined as the union of the first sets for
 /// all rules with that token on the left-hand side; a terminal token is its
 /// own first set.
@@ -76,17 +74,15 @@ pub trait Typed {
 /// A rule's first set is the union of first sets for leading tokens on its
 /// right-hand side, up to and including the first
 /// non-[nullable](trait.Nullable.html) token.
-pub trait HasFirstSet {
-    /// Find the token's first set, and store it into the given vector.
-    fn first_set_into(&self, out: &mut Vec<Ref<Token>>);
-
-    /// Calculate and return the token's first set.
-    fn first_set(&self) -> Vec<Ref<Token>> {
-        let mut out = Vec::new();
-        self.first_set_into(&mut out);
-        out
-    }
-}
+type HasFirstSet = Walkable<FirstSet,&Token>;
+// pub trait HasFirstSet {
+//     /// Fetch an iterator over all tokens in this token's first set.
+//     fn first_set<'a>(&'a self) -> FirstSet<'a> {
+//         FirstSet{stack: Vec::new()}
+//         self.first_set_into(&mut out);
+//         out
+//     }
+// }
         
 /// Provides a method to determine whether a token is "nullable", i.e., has any
 /// rules that may reduce to an empty sequence.
@@ -125,8 +121,8 @@ impl Eq for Token {}
 /// We Consider two tokens to be identical if they live at the same address.
 /// This is a complete hack, but will have to do since neither Hash nor
 /// PartialEq are object-safe.
-impl PartialEq<Token> for Token {
-    fn eq(&self, other: &Token) -> bool {
+impl<'a,'b> PartialEq<Token + 'b> for Token + 'a {
+    fn eq(&self, other: &'b Token) -> bool {
         use std::mem::transmute;
         unsafe { transmute::<_,TraitObject>(self).data ==
                  transmute::<_,TraitObject>(other).data }
@@ -371,7 +367,7 @@ impl Nullable for Synthetic {
     }
 }
 
-impl HasFirstSet for Synthetic { fn first_set_into(&self, out: &mut Vec<Ref<Token>>) { out.push(self.base.clone()) } }
+impl HasFirstSet for Synthetic { fn first_set_into<'a,'b>(&'a self, out: &'b mut Vec<Ref<Token>>) { out.push(self.base.clone()) } }
 impl symbol::Nameable for Synthetic { fn name(&self) -> Symbol { self.base.name() } }
 default_refcounted_impl!(Synthetic);
 // impl HasRootScope<Grammar> for Synthetic { fn root_scope(&self) -> Ref<Grammar> { self.base.root_scope() } }
@@ -417,7 +413,7 @@ impl Token for Terminal {
 impl Repeatable for Terminal {}
 impl Nullable for Terminal { fn is_nullable(&self) -> bool { false } }
 impl HasFirstSet for Terminal {
-    fn first_set_into(&self, out: &mut Vec<Ref<Token>>)  {
+    fn first_set_into<'a,'b>(&'a self, out: &'b mut Vec<Ref<Token>>)  {
         let x = Reference::<Token>::from_trait_obj(self);
         out.push(x);
     }
@@ -495,7 +491,7 @@ impl Nullable for Nonterminal {
 }
 
 impl HasFirstSet for Nonterminal {
-    fn first_set_into(&self, out: &mut Vec<Ref<Token>>) {
+    fn first_set_into<'a,'b>(&'a self, out: &'b mut Vec<Ref<Token>>) {
         for rule in self.rules.iter() { rule.first_set_into(out) }
     }
 }
@@ -512,7 +508,8 @@ impl Eq for Nonterminal {}
 impl PartialEq<Nonterminal> for Nonterminal
 {
     fn eq(&self, other: &Nonterminal) -> bool {
-        self.base == other.base && match self.rules.difference(&other.rules).size_hint() {
+        self.base == other.base &&
+            match self.rules.difference(&other.rules).size_hint() {
             (_, Some(x)) => x == 0,
             _ => false }
     }
