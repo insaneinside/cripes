@@ -1,3 +1,4 @@
+use std::convert::AsRef;
 use cripes::symbol::{Pool,Type,Unpacked,Inline,PackFormat};
 use std::string::String;
 
@@ -8,18 +9,18 @@ macro_rules! inline_test_strings {
 
 #[test]
 fn inline_as_slice() {
-    for s in inline_test_strings!() {
-        let sym = Inline::new(s.as_slice());
-        assert_eq!(sym.as_slice(), s.as_slice());
+    for ref s in inline_test_strings!() {
+        let sym = Inline::new(&s.as_ref());
+        assert_eq!(sym.as_ref(), AsRef::<str>::as_ref(s));
     }
 }
 
 #[test]
 fn inline_packed_as_slice() {
-    for s in inline_test_strings!() {
-        let inl = Inline::new(s.as_slice());
-        assert_eq!(inl.as_slice(), s.as_slice());
-        assert_eq!(inl.pack().as_slice(), s.as_slice());
+    for ref s in inline_test_strings!() {
+        let inl = Inline::new(s.as_ref());
+        assert_eq!(inl.as_ref(), AsRef::<str>::as_ref(s));
+        assert_eq!(inl.pack().as_ref(), AsRef::<str>::as_ref(s));
     }
 }
 
@@ -27,7 +28,7 @@ fn inline_packed_as_slice() {
 #[test]
 fn inline_pack_unpack() {
     let foo = Inline::new("foo");
-    assert_eq!(foo.as_slice(), "foo");
+    assert_eq!(foo.as_ref(), "foo");
 
     let bar = foo.pack();
 
@@ -55,11 +56,11 @@ fn pooled_pack_unpack() {
     assert_eq!(a.type_of(), Type::POOLED);
     assert_eq!(b.type_of(), Type::POOLED);
 
-   println!("{:?} => {:?}", a, a.as_slice());
+   println!("{:?} => {:?}", a, a.as_ref());
     println!("{:?}", a.unpack());
 
     assert_eq!(a, a);
     panic_unless!(a != b && b != a, "`a` and `b` are distinct symbols and should not be equal");
-    assert_eq!(a.as_slice(), a_str);
-    assert_eq!(b.as_slice(), b_str);
+    assert_eq!(a.as_ref(), a_str);
+    assert_eq!(b.as_ref(), b_str);
 }
