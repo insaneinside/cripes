@@ -38,12 +38,12 @@ pub trait Reference<T: ?Sized> where T: RefCounted, Self: Sized {
     /// Create a reference from a raw pointer.  The reference-type
     /// implementation should do no management of the referand's refcount for
     /// this operation.
-    fn from_obj<U>(obj: &U) -> Self;
+    fn from_obj<U>(obj: *const U) -> Self;
 
     /// Create an intrusive reference from a trait object.  The reference-type
     /// implementation should do no management of the referand's refcount for
     /// this operation.
-    fn from_trait_obj(obj: &T) -> Self;
+    fn from_trait_obj(obj: *const T) -> Self;
 
 
     /// Move the given value into the heap, and return a reference to it.  The value
@@ -77,14 +77,14 @@ pub trait Reference<T: ?Sized> where T: RefCounted, Self: Sized {
 
         // Move the object onto the heap using Box, then discard the box in
         // favor of a hot, sticky, unsafe mess.
-        let heaped: *const () = unsafe { std::boxed::into_raw(Box::new(obj)) as *const () };
+        let heaped: *const U = unsafe { std::boxed::into_raw(Box::new(obj)) as *const U };
 
         if std::mem::size_of::<&T>() == std::mem::size_of::<usize>() {
             // standard pointer
-            unsafe { Reference::from_obj(&*(heaped as *const U)) }
+            unsafe { Reference::from_obj(heaped) }
         } else {
             // trait object
-            unsafe { Reference::from_trait_obj(&*(heaped as *const T)) }
+            unsafe { Reference::from_trait_obj(heaped as *const T) }
         }
     }
 }
@@ -184,12 +184,13 @@ enum RefImpl<T: ?Sized> where T: RefCounted {
 
 
 impl<T: ?Sized> Reference<T> for Ref<T> where T: RefCounted {
-    fn from_trait_obj(obj: &T) -> Self {
-        Ref(RefImpl::TraitObject(std::mem::transmute(obj)))
+    fn from_trait_obj(obj: *const T) -> Self {
+        assert_eq!(std::mem::size_of::<*const T>(), 16);
+        unsafe { Ref(RefImpl::TraitObject(std::mem::transmute(obj))) }
     }
 
 
-    fn from_obj<U>(obj: &U) -> Ref<T> {
+    fn from_obj<U>(obj: *const U) -> Ref<T> {
         let ptr: *const T =  unsafe { std::mem::transmute(obj) };
         if ptr == (0 as *const T) { Ref(RefImpl::Empty) }
         else { Ref(RefImpl::Pointer(ptr)) }
