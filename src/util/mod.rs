@@ -1,6 +1,9 @@
 //! Utilities not directly related to parsing, lexing, or
 //! language-manipulation.
 
+pub mod hash;
+
+
 /// Panic with a given message unless an expression evaluates to true.
 ///
 /// ## Examples
