@@ -1,6 +1,3 @@
-use std::vec::Vec;
-
-use cripes::pattern::*;
 use cripes::pattern::iter::*;
 
 /// Test the `Once` iterator.
@@ -25,11 +22,10 @@ fn test_once() {
 }
 
 
-/// Test the basic Element<T>
+/// test for the `Empty` iterator.
 #[test]
-fn test_element() {
-    let seq: Sequence<char> = Sequence::new(['f','(','x',')',':','Ν','→','ℜ'].iter().map(|c| Element::Atom(*c)).collect::<Vec<_>>());
-    println!("{:?}", seq);
-    let elt: Box<Pattern<char>> = Box::new(seq);
-    println!("{:?}", elt);
+fn test_empty() {
+    let mut n = 0;
+    for _ in Empty::<()>::new() { n += 1; }
+    assert_eq!(n, 0);
 }
