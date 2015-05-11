@@ -64,6 +64,13 @@ pub trait Hashable {
     fn hash(&self, state: &mut Hasher);
 }
 
+impl Hashable for char {
+    #[inline(always)]
+    fn hash(&self, state: &mut Hasher) {
+        state.write_u32(*self as u32);
+    }
+}
+
 /// Hash an object using the Hashable interface.
 ///
 /// 
