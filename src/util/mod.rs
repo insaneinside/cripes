@@ -25,3 +25,4 @@ macro_rules! panic_unless {
 
 pub mod hash;
 pub mod iter;
+pub mod flex_box;
