@@ -1,9 +1,6 @@
 //! Utilities not directly related to parsing, lexing, or
 //! language-manipulation.
 
-pub mod hash;
-
-
 /// Panic with a given message unless an expression evaluates to true.
 ///
 /// ## Examples
@@ -24,3 +21,7 @@ pub mod hash;
 macro_rules! panic_unless {
     ($condition:expr, $($rest:expr),+) => ({ if ! $condition { panic!($($rest),+); } });
 }
+
+
+pub mod hash;
+pub mod iter;

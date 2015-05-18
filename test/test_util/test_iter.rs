@@ -1,4 +1,4 @@
-use cripes::pattern::iter::*;
+use cripes::util::iter::*;
 
 /// Test the `Once` iterator.
 #[test]

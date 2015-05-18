@@ -2,8 +2,6 @@ use std::iter::FromIterator;
 
 use cripes::pattern::*;
 
-mod test_iter;
-
 /// Test the basic Element<T> values.
 #[test]
 fn test_element() {

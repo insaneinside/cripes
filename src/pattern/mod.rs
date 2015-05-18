@@ -1,12 +1,11 @@
 //! Support for patterns of arbitrary element types.
 use std;
 use std::marker::{PhantomData};
+use util::iter;
 
 pub mod walk;
-pub mod iter;
 
 use self::walk::*;
-use self::iter::*;
 
 /// Interface for descriptions of syntactic patterns.
 pub trait Pattern<'a,T>:
