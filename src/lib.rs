@@ -1,10 +1,9 @@
 #![crate_type = "rlib"]
 #![crate_name = "cripes"]
 
+#![feature(alloc)]
 #![feature(core)]
 #![feature(hash)]
-#![feature(convert)]
-#![feature(unsafe_destructor)]
 
 use std::slice::bytes;
 
