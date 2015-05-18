@@ -1,6 +1,9 @@
 //! Utilities for generalized iterators over trees of arbitrary types.
 
-use super::iter::*;
+use std;
+use std::iter::IntoIterator;
+
+use util::flex_box::*;
 pub use self::action::Action;
 
 /// Descriptions of actions that may be taken on a given node when traversing
@@ -21,7 +24,8 @@ pub mod action {
         pub flags: u8
     }
 
-    impl<'a,Type> Action<Type> where Type: WalkType, <Type as WalkType>::Item: super::Walkable<'a,Type> {
+    impl<'a,Type> Action<Type> where Type: WalkType, <Type as WalkType>::Item: super::Walkable<Type> {
+        #[inline]
         pub fn new(y: Option<<Type as WalkType>::Yield>, r: bool, f: u8) -> Action<Type> {
             Action{yield_value: y, recurse: r, flags: f}
         }
@@ -40,13 +44,12 @@ pub trait WalkType {
     type Item;
 }
 
-
-
 /// Interface for patterns whose elements may be visited in
 /// a runtime-specified manner.
 ///
 /// @tparam Type Walk type this trait works with.
-pub trait Walkable<'a,Type: WalkType>: Iterable<'a,Box<Iterator<Item=&'a <Type as WalkType>::Item>>> {
+pub trait Walkable<Type: WalkType>
+{
     /// Determine the action to take for a given node in the implementor's
     /// element tree.
     ///
@@ -54,56 +57,76 @@ pub trait Walkable<'a,Type: WalkType>: Iterable<'a,Box<Iterator<Item=&'a <Type a
     ///
     /// @return Structure describing the action to be performed for the
     ///     given element.
-    fn action(&'a self, element: &'a <Type as WalkType>::Item)
+    fn action<'a>(&'a self, element: &'a <Type as WalkType>::Item)
                   -> Action<Type>;
 }
 
 /// Provides additional helper methods for implementers of a particular walk type.
 pub trait WalkableExt {
-    fn walk<'a,W>(&'a self) -> Walker<'a,W>
-        where Self: Sized + Walkable<'a,W>,
-              W: WalkType,
-              <W as WalkType>::Item: 'a {
+    #[inline(always)]
+    fn walk<'a,'b,W>(&'a self) -> Walker<'b,W,Self>
+    where 'a: 'b,
+          Self: 'b + Sized + Walkable<W>,
+          W: 'b + WalkType,
+          <W as WalkType>::Yield: 'b,
+          <W as WalkType>::Item: 'b
+          //,<Self as Iterable<<W as WalkType>::Item>>::Iterator: 'b
+{
         Walker::new(self)
     }
 }
 
+
 /// Iterator used to perform a particular walk on a particular type.
 ///
-/// @tparam Tag Walk-type tag.
-///
-/// @tparam Yield `Item` type for the iterator implementation of
-///     the structure.
-///
-/// @tparam T Top-level Walkable type for which this structure is an iterator.
-pub struct Walker<'a,Type>
-    where Type: WalkType,
-          <Type as WalkType>::Item: 'a {
-
-    walkable: &'a Walkable<'a,Type>,
-    base_iterator: Option<Box<Iterator<Item=&'a <Type as WalkType>::Item> + 'a>>,
-    sub_iterator: Option<Box<Iterator<Item=<Type as WalkType>::Yield> + 'a>>
+/// @tparam Walk Walk type
+/// @tparam T Type of the value being walked.
+pub struct Walker<'a, Walk, T>
+    where Walk: 'a + WalkType,
+          <Walk as WalkType>::Yield: 'a,
+          <Walk as WalkType>::Item: 'a,
+          T: 'a + Walkable<Walk>,
+          &'a T: IntoIterator,
+          <&'a T as IntoIterator>::Item: 'a,
+          <&'a T as IntoIterator>::IntoIter: 'a
+{
+    walkable: &'a T,
+    base_iterator: Option<Ref<'a,Iterator<Item=<Walk as WalkType>::Item>>>,
+    sub_iterator_box: FlexBox,
+    sub_iterator: Option<Ref<'a,Walker<'a,Walk,T>>>
 }
 
-impl<'a,Type> Walker<'a,Type>
-    where Type: WalkType,
-          <Type as WalkType>::Item: 'a {
+
+impl<'a,Walk,T> Walker<'a,Walk,T>
+    where Walk: 'a + WalkType,
+          <Walk as WalkType>::Yield: 'a,
+          <Walk as WalkType>::Item: 'a,
+          T: 'a + Walkable<Walk>,
+          &'a T: IntoIterator,
+          <&'a T as IntoIterator>::Item: 'a
+          //,<T as Iterable<<Walk as WalkType>::Item>>::Iterator: 'a
+
+{
     /// Create a new walker iterator from the given base iterator.
-    pub fn new(base: &'a Walkable<'a,Type>) -> Walker<'a,Type> {
+    pub fn new(base: &'a T) -> Walker<'a,Walk,T> {
         Walker{walkable: base,
-               base_iterator: Some(base.iter()),
+               base_iterator: Some(base.into_iter()),
+               sub_iterator_box: FlexBox::new(),
                sub_iterator: None}
     }
 }
 
-impl<'a,Type> Iterator for Walker<'a,Type>
+impl<'a,Type,T> std::iter::Iterator for Walker<'a,Type,T>
 where Type: 'a + WalkType,
       <Type as WalkType>::Yield: 'a,
-      <Type as WalkType>::Item: 'a + WalkableExt + Walkable<'a,Type>,
+      <Type as WalkType>::Item: 'a + Walkable<Type>,
+      &'a T: IntoIterator,
+      <&'a T as IntoIterator>::Item: 'a,
+      T: 'a + Walkable<Type>,
 {
     type Item = <Type as WalkType>::Yield;
 
-    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+    fn next(&mut self) -> Option<<Type as WalkType>::Yield> {
         let mut terminate: bool = false;
         loop {
             if terminate { self.base_iterator = None;
@@ -120,14 +143,14 @@ where Type: 'a + WalkType,
             self.sub_iterator = None;
             if let Some(ref mut iter) = self.base_iterator {
                 if let Some(ref element) = iter.next() {
-                    let action = self.walkable.action(*element);
+                    let action = self.walkable.action(element);
 
                     // FIXME: need to provide a way to specify order in which
                     // to recurse vs. yield.  The solution should allow for
                     // selection of different traversal methods -- need to come
                     // up with an API for that.
                     if action.recurse {
-                        self.sub_iterator = Some(Box::new(element.walk::<Type>()));
+                        self.sub_iterator = Some(self.sub_iterator_box.store(element.walk::<Type>()));
 
                         // Recurse immediately if we have no value to yield.
                         if ! action.yield_value.is_some() {
