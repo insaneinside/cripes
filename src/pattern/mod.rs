@@ -17,7 +17,7 @@ use util::flex_box::*;
 use util::iter;
 
 pub mod walk;
-use self::walk::{action,Action,Walkable,WalkableExt,WalkType};
+use self::walk::{action,Action,Walkable,WalkType};
 
 /// Hash algorithm we'll use to provide an object-safe `Eq` implementation on
 /// the top-level Pattern interface.
@@ -29,7 +29,7 @@ pub trait Pattern<T>:
     //Walkable<FirstSet<T>> +
 
     // FIXME: Walkable<_> needs to be made object-safe
-    Walkable<AtomicFirstSet<T>> +
+    Walkable<AtomicFirstSet<T>,Item=Element<T>> +
 
     Nullable +
     Hashable +
@@ -75,7 +75,6 @@ pub struct FirstSet<'a,T: 'a> { _marker: PhantomData<&'a T> }
 
 impl<'a,T> WalkType for FirstSet<'a,T> {
     type Yield = &'a Element<T>;
-    type Item = Element<T>;
 }
 
 
@@ -85,7 +84,6 @@ impl<'a,T> WalkType for FirstSet<'a,T> {
 pub struct AtomicFirstSet<T> { _marker: PhantomData<T> }
 impl<T> WalkType for AtomicFirstSet<T>  {
     type Yield = T;
-    type Item = Element<T>;
 }
 
 
@@ -132,7 +130,7 @@ impl<'a,T> IntoIterator for &'a Empty<T> {
 }
 
 impl<T> Walkable<AtomicFirstSet<T>> for Empty<T> {
-    fn action<'a>(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
+    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
         Action::new(None, false, action::TERMINATE as u8)
     }
 }
@@ -312,7 +310,7 @@ impl<'a,T> IntoIterator for &'a Element<T> {
 
 
 impl<T> Walkable<AtomicFirstSet<T>> for Element<T> where T: Eq + PartialEq + Copy + Hash {
-    fn action<'a>(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
+    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
             Element::Atom(atom) => Action::new(Some(atom), false, action::TERMINATE as u8),
             Element::Pattern(..) => Action::new(None, true, action::TERMINATE as u8)
@@ -388,7 +386,6 @@ impl<T> Iterator for SequenceFirstSet<T> {
 }*/
 
 
-impl<T: Copy + Hash + Eq + PartialEq> WalkableExt for Sequence<T> {}
 
 impl<T> Pattern<T> for Sequence<T>
 where T: Eq + PartialEq + Hash + Hashable + Copy + Debug {
@@ -431,7 +428,7 @@ impl<'a,T> IntoIterator for &'a Sequence<T> {
 }
 
 impl<T> Walkable<AtomicFirstSet<T>> for Sequence<T> where T: Eq + PartialEq + Copy + Hash {
-    fn action<'a>(&'a self, element: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
+    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
             Element::Atom(atom) =>
                 Action::new(Some(atom), false, action::TERMINATE as u8),
