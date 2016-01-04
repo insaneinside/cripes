@@ -3,8 +3,6 @@
 #![crate_name = "cripes"]
 
 #![feature(alloc)]
-#![feature(core)]
-#![feature(hash)]
 
 use std::slice::bytes;
 
