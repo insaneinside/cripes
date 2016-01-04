@@ -36,7 +36,7 @@ pub trait Pattern<T>:
     std::fmt::Debug
     where T: Copy + Hash + std::fmt::Debug + Sized
 {
-    fn clone_to_box(&self) -> Box<Pattern<T>>;
+    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>>;
 
     /// Fetch an iterator over the pattern's first set.
     ///
@@ -107,7 +107,7 @@ impl<T> Empty<T> {
 }
 
 impl<T> Pattern<T> for Empty<T> where T: Copy + Hash + std::fmt::Debug + Sized {
-     fn clone_to_box(&self) -> Box<Pattern<T>> {
+     fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> {
          Box::new(Empty::new())
      }
 
@@ -152,7 +152,7 @@ impl<T> Nullable for Empty<T> {
 pub enum Element<T> {
     Empty,
     Atom(T),
-    Pattern(Box<Pattern<T>>)
+    Pattern(Box<Pattern<T,Item=Element<T>>>)
 }
 
 impl<T> Element<T> {
@@ -178,7 +178,7 @@ impl<T> Hashable for Element<T> where T: Copy + Hash {
             Element::Empty => (),
             Element::Atom(ref atom) => state.write(unsafe { from_raw_parts::<u8>(std::mem::transmute(atom),
                                                                                  std::mem::size_of::<T>()) }),
-            Element::Pattern(ref pat) => <Pattern<T> as Hashable>::hash((*pat).deref(), state)
+            Element::Pattern(ref pat) => <Pattern<T,Item=Element<T>> as Hashable>::hash((*pat).deref(), state)
         }
     }
 }
@@ -220,7 +220,7 @@ impl<T> PartialEq<Element<T>> for Element<T> where T: Copy + Hash + Eq + Partial
 
 impl<T> Pattern<T> for Element<T>
 where T: Eq + PartialEq + Hash + Copy + std::fmt::Debug {
-    fn clone_to_box(&self) -> Box<Pattern<T>> where T: 'static {
+    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> where T: 'static {
         match *self {
             Element::Empty => Box::new(Element::Empty),
             Element::Atom(ref x) => Box::new(Element::Atom(x.clone())),
@@ -389,7 +389,7 @@ impl<T> Iterator for SequenceFirstSet<T> {
 
 impl<T> Pattern<T> for Sequence<T>
 where T: Eq + PartialEq + Hash + Hashable + Copy + Debug {
-    fn clone_to_box(&self) -> Box<Pattern<T>> {
+    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> {
         Box::new(Sequence::from_iter(self.elements.collect()));
     }
 
@@ -418,7 +418,8 @@ where T: Eq + PartialEq + Hash + Hashable + Copy + Debug {
 }
 
 
-impl<'a,T> IntoIterator for &'a Sequence<T> {
+impl<'a,T> IntoIterator for &'a Sequence<T>
+where T: Hash + Hashable + Copy + Debug {
     type Item = &'a Element<T>;
     type IntoIter = std::slice::Iter<'a,Element<T>>;
 
@@ -427,7 +428,8 @@ impl<'a,T> IntoIterator for &'a Sequence<T> {
     }
 }
 
-impl<T> Walkable<AtomicFirstSet<T>> for Sequence<T> where T: Eq + PartialEq + Copy + Hash {
+impl<T> Walkable<AtomicFirstSet<T>> for Sequence<T>
+where T: Eq + PartialEq + Copy + Hash + Debug {
     fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
         match *element {
             Element::Atom(atom) =>

@@ -10,7 +10,8 @@ use std::iter::Iterator;
 use std::mem::{align_of,size_of};
 use std::intrinsics::move_val_init;
 use std::ops::{Deref,DerefMut,Drop};
-use std::rt::heap::{allocate,deallocate,reallocate};
+extern crate alloc;
+use self::alloc::heap::{allocate,deallocate,reallocate};
 
 /// A flexibly-sized byte container.
 pub struct FlexBox {
