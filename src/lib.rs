@@ -18,4 +18,3 @@ pub mod util;
 
 #[macro_use]
 pub mod symbol;
-pub mod pattern;
