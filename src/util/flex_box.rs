@@ -9,7 +9,7 @@ use std::ptr;
 use std::iter::Iterator;
 use std::mem::{align_of,size_of};
 use std::intrinsics::move_val_init;
-use std::ops::{Deref,DerefMut,Drop};
+use std::ops::Drop;
 extern crate alloc;
 use self::alloc::heap::{allocate,deallocate,reallocate};
 
