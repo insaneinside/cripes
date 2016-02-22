@@ -1,9 +1,13 @@
-#![feature(unstable)]
 #![crate_type = "rlib"]
 #![crate_name = "cripes"]
 
 #![feature(alloc)]
 
+#![feature(core_intrinsics)]
+#![feature(heap_api)]
+#![feature(unsize)]
+#![feature(coerce_unsized)]
+#![feature(drop_in_place)]
 
 /// Utility wrapper for `std::ptr::copy` that retains C's `memcpy`
 /// argument-order semantics.
