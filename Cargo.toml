@@ -7,7 +7,10 @@ authors=["Collin J. Sutton"]
 name="cripes"
 path="src/lib.rs"
 
-
 [[test]]
 name="test"
 path="test/mod.rs"
+
+[dependencies]
+petgraph = "*"
+regex-syntax = "*"
