@@ -56,7 +56,7 @@ fn pooled_pack_unpack() {
     assert_eq!(a.type_of(), Type::POOLED);
     assert_eq!(b.type_of(), Type::POOLED);
 
-   println!("{:?} => {:?}", a, a.as_ref());
+    println!("{:?} => {:?}", a, a.as_ref());
     println!("{:?}", a.unpack());
 
     assert_eq!(a, a);
