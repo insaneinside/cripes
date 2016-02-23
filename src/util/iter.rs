@@ -27,8 +27,7 @@ impl<T> Iterator for Once<T> where T: Copy {
         if let Once(Some(val)) = *self {
             self.0 = None;
             Some(val) }
-        else {
-            None }
+        else { None }
     }
 
     #[inline(always)]
