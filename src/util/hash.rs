@@ -54,7 +54,7 @@
 //! use std::hash::{Hash,Hasher,SipHasher};
 //! use std::collections::HashSet;
 //!
-//! use cripes::util::hash::{hash,Hashable};
+//! use cripes::util::hash::{stdhash,hash,Hashable};
 //!
 //! trait MyInterface: Hashable {}
 //!
@@ -92,7 +92,7 @@
 //!     // ...
 //!
 //!     for x in &hs {
-//!         println!("{}", std::hash::hash::<_,SipHasher>(x));
+//!         println!("{}", stdhash::<_,SipHasher>(x));
 //!     }
 //! }
 //!
@@ -115,6 +115,14 @@ impl Hashable for char {
         state.write_u32(*self as u32);
     }
 }
+
+
+pub fn stdhash<T: Hash,H: Default + Hasher>(t: &T) -> u64 {
+    let mut s = H::default();
+    t.hash(&mut s);
+    s.finish()
+}
+
 
 /// Hash an object by using the Hashable interface directly.
 ///
