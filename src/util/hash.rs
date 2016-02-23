@@ -8,10 +8,10 @@
 //! object as a trait object (`state: &Hasher`) and thus requires no type
 //! parameters on function `hash`.
 //!
-//! For this reason, `Hashable` is entirely agnostic to the hash implementation being
-//! used; any trait object that specifies `Hashable` as a supertrait, and
-//! implements `Hash` in terms of Hashable, can be used may be safely used as
-//! a (boxed) type parameter to containers like `HashSet`.
+//! For this reason, `Hashable` is entirely agnostic to the hash implementation
+//! being used; any trait object that specifies `Hashable` as a supertrait, and
+//! implements `Hash` in terms of Hashable, may be safely used as a (boxed)
+//! type parameter to containers like `HashSet`.
 //!
 //! TL;DR => if you want to hash instances of a type using dynamic dispatch
 //! through a trait it implements, you must:
