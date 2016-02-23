@@ -1,727 +1,243 @@
-//! Support for patterns of arbitrary element types.
-use std;
-use std::ops::Deref;
-//use std::convert::AsRef;
-use std::slice::*;
-use std::fmt::Debug;
-use std::clone::Clone;
-use std::marker::PhantomData;
-//use std::collections::HashSet;
-use std::hash::{Hash,Hasher};
-use std::cmp::{Eq,PartialEq};
-use std::iter::{Iterator,FromIterator,IntoIterator};
+//! Graph types for pattern representation.
+extern crate petgraph;
+extern crate regex_syntax;
+use self::regex_syntax::{Expr,Repeater};
 
-use util::hash::{hash,Hashable};
+use std::error::Error;
+use std::result::Result;
+use std::fmt::{self,Display,Debug};
 
-use util::flex_box::*;
-use util::iter;
+pub mod transform;
 
-pub mod walk;
-use self::walk::{action,Action,Walkable,WalkType};
+pub type NodeID = petgraph::graph::NodeIndex<petgraph::graph::DefIndex>;
+pub type EdgeID = petgraph::graph::EdgeIndex<petgraph::graph::DefIndex>;
 
-/// Hash algorithm we'll use to provide an object-safe `Eq` implementation on
-/// the top-level Pattern interface.
-type HashAlgo = std::hash::SipHasher;
+/** A node within a grammar's flow graph.  Nodes represent points before and
+ * immediately after a token has been consumed; they associate arbitrary
+ * actions with parse points or parser "states". */
+#[derive(Debug,Copy,Clone)]
+pub enum Node<T: Debug + Copy + Clone + PartialOrd<T>> {
+    /// First node in a (sub)graph.
+    Entry,
 
-/// Interface for descriptions of syntactic patterns.
-pub trait Pattern<T>:
-    //Clone +
-    //Walkable<FirstSet<T>> +
+    /// Nothing to do; continue the parse.
+    Continue,
 
-    // FIXME: Walkable<_> needs to be made object-safe
-    Walkable<AtomicFirstSet<T>,Item=Element<T>> +
-
-    Nullable +
-    Hashable +
-    std::fmt::Debug
-    where T: Copy + Hash + std::fmt::Debug + Sized
-{
-    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>>;
-
-    /// Fetch an iterator over the pattern's first set.
-    ///
-    /// @param buf Buffer into which the iterator should be placed.
-    ///
-    /// @return Result containing either a reference to the iterator stored in
-    /// `buf`, or the required buffer size if the buffer was too small.
-    fn first_set<'a,'b>(&'a self, buf: &'b mut FlexBox) -> Ref<'b,Iterator<Item=T>> where 'a: 'b;
-
-    /// Determine whether the pattern is "fixed", i.e. matches a known single
-    /// input sequence.
-    fn is_fixed(&self) -> bool;
-
-    #[unstable]
-    /// Obtain lower and upper bounds on the length of an input sequence that
-    /// would match the pattern.  A value of `None` in the second element of
-    /// the returned tuple indicates that there *may* be no upper bound.
-    ///
-    /// Unstable until a decision is reached on whether this method must
-    /// recurse subpatterns.
-    fn input_length_bounds(&self) -> (usize, Option<usize>);
+    /// user-specified action to be taken when a parser reaches the node.
+    Action(fn(Edge<T>)),
+    
+    /// accept the (sub)graph and return from the parse
+    Accept
 }
 
-// FIXME: Walkable needs to be made object-safe.
-/*impl<T> Hash for Pattern<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        <Pattern<T> as Hashable>::hash(self, state);
+impl<T: Debug + Copy + Clone + PartialOrd<T>>
+Display for Node<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Self as Debug>::fmt(self, f)
     }
-}*/
-
-
-/// Walk-type tag for walking patterns' first sets. A pattern's first set is
-/// defined here as the set of elements that may begin a sequence matching
-/// that pattern.
-pub struct FirstSet<'a,T: 'a> { _marker: PhantomData<&'a T> }
-
-impl<'a,T> WalkType for FirstSet<'a,T> {
-    type Yield = &'a Element<T>;
 }
-
-
-/// Walk-type tag for walking pattern's *atomic* first sets.  A pattern's
-/// atomic first set is the set of *atoms* that may begin a sequence matching
-/// that pattern.
-pub struct AtomicFirstSet<T> { _marker: PhantomData<T> }
-impl<T> WalkType for AtomicFirstSet<T>  {
-    type Yield = T;
-}
-
-
-/// Provides a method to determine whether a pattern is "nullable", i.e., can
-/// match an empty sequence.
-pub trait Nullable {
-    /// Check if the token is nullable.
-    fn is_nullable(&self) -> bool { false }
-}
-
-/* **************************************************************** */
-/// Empty pattern type.
-
-#[derive(Debug)]
-pub struct Empty<T> { _marker: PhantomData<T> }
-
-impl<T> Empty<T> {
-    pub fn new() -> Self {
-        Empty{ _marker: PhantomData }
+impl<T: Debug + Copy + Clone + PartialOrd<T>>
+Display for Edge<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Self as Debug>::fmt(self, f)
     }
 }
 
-impl<T> Pattern<T> for Empty<T> where T: Copy + Hash + std::fmt::Debug + Sized {
-     fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> {
-         Box::new(Empty::new())
-     }
+/// Non-consuming pattern matchers.
+#[derive(Debug,Copy,Clone)]
+pub enum Anchor {
+    StartOfInput,
+    EndOfInput,
+    LookAhead(NodeID),
+    LookBehind(NodeID)
+}
 
-    fn first_set<'a,'b>(&self, buf: &'b mut FlexBox) -> Ref<'b,Iterator<Item=T>>
-        where 'a: 'b, T: 'a + 'b {
-        buf.store(iter::Empty::new())
+#[derive(Debug,Copy,Clone)]
+pub struct ClassRange<T: Debug + Copy + Clone + PartialOrd<T>> {
+    pub first: T,
+    pub last: T
+}
+
+/** Flag type used to differentiate between normal and inverting matches on
+ * pattern elements. */
+#[derive(Debug,Copy,Clone)]
+pub enum Polarity {
+    /// Normal match behavior.
+    NORMAL,
+    /// Invert the match result.
+    INVERTED
+}
+
+/** Description of a potential transition between parser states.  `Edge`
+ * specifies the conditions under which a parser is allowed to transition to
+ * the linked state. */
+
+#[derive(Debug,Clone)]
+pub struct Edge<T: Debug + Copy + Clone+ PartialOrd<T>> {
+    element: Element<T>,
+    polarity: Polarity
+}
+
+impl<T: Debug + Copy + Clone+ PartialOrd<T>> Edge<T> {
+    pub fn new(elt: Element<T>) -> Self {
+        Edge{element: elt, polarity: Polarity::NORMAL}
     }
-
-    fn is_fixed(&self) -> bool { true }
-    fn input_length_bounds(&self) -> (usize, Option<usize>) { (0, Some(0)) }
-}
-
-impl<'a,T> IntoIterator for &'a Empty<T> {
-    type Item = &'a Element<T>;
-    type IntoIter = iter::Empty<&'a Element<T>>;
-
-    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-        iter::Empty::new()
+    pub fn new_complement(elt: Element<T>) -> Self {
+        Edge{element: elt, polarity: Polarity::INVERTED}
     }
 }
 
-impl<T> Walkable<AtomicFirstSet<T>> for Empty<T> {
-    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
-        Action::new(None, false, action::TERMINATE as u8)
-    }
-}
-
-impl<T> Hashable for Empty<T> {
-    fn hash(&self, _state: &mut Hasher) {
-        // No-op.
-    }
-}
-
-impl<T> Nullable for Empty<T> {
-    fn is_nullable(&self) -> bool { true }
-}
-
-/* **************************************************************** */
-/// Component of a pattern.  Each element is either an atomic value, or
-/// a Pattern trait object.
-#[derive(Debug)]
-pub enum Element<T> {
-    Empty,
+#[derive(Debug,Clone)]
+/// A matchable pattern element.
+pub enum Element<T: Debug + Copy + Clone+ PartialOrd<T>> {
+    /// atomic literal value
     Atom(T),
-    Pattern(Box<Pattern<T,Item=Element<T>>>)
+
+    /// any of a set of elements
+    Class(Vec<ClassRange<T>>),
+
+    /** a sequence of atoms.  By directly storing all elements of a sequence
+     * (instead of separating them with nodes), we can possibly apply certain
+     * optimizations during codegen. */
+    Sequence(Vec<T>),
+
+    /// any atom
+    Wildcard,
+
+    /** Condition that must match the current input for pattern-matching to
+     * continue */
+    Anchor(Anchor),
+
+    /** Subgraph reference (instantiation) by reference to that graph's
+     * entry node. */
+    Subgraph(NodeID),
+
+    /// Arbitrary repetition.
+    Closure{pattern: NodeID, min: u32, max: Option<u32>},
 }
 
-impl<T> Element<T> {
-    // pub fn from_pattern<P: Pattern<T>>(x: P) -> Self {
-    //     Element::Pattern(Box::new(x))
-    // }
+/** Graph representation of a grammar's DFA.  `Graph` is used to model the
+ * DFA's control-flow and allow various transformations to be applied. */
+pub type Graph<T> = petgraph::Graph<Node<T>,Edge<T>,petgraph::Directed>;
+
+
+/// Any grammar type.
+pub trait Grammar<T: Debug + Copy + Clone + PartialOrd<T>>
+where Self: Sized {
+    type ParseError: Error;
+    /// Attempt to parse a `str` into an implementation instance.
+    fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,Self::ParseError>;
 }
 
-
-impl<T> Clone for Element<T> where T: Copy + Clone + Debug + Hash {
-    fn clone(&self) -> Element<T> {
-        match *self {
-            Element::Empty => Element::Empty,
-            Element::Atom(ref x) => Element::Atom(x.clone()),
-            Element::Pattern(ref x) => Element::Pattern(x.clone_to_box())
-        }
-    }
-}
-
-impl<T> Hashable for Element<T> where T: Copy + Hash {
-    fn hash(&self, state: &mut Hasher) {
-        match *self {
-            Element::Empty => (),
-            Element::Atom(ref atom) => state.write(unsafe { from_raw_parts::<u8>(std::mem::transmute(atom),
-                                                                                 std::mem::size_of::<T>()) }),
-            Element::Pattern(ref pat) => <Pattern<T,Item=Element<T>> as Hashable>::hash((*pat).deref(), state)
-        }
-    }
-}
-
-impl<T> Hash for Element<T> where T: Copy + Hash {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match *self {
-            Element::Empty => (),
-            Element::Atom(ref atom) => atom.hash(state),
-            Element::Pattern(ref pat) => pat.hash(state)
-        }
-    }
-    fn hash_slice<H: Hasher>(data: &[Self], state: &mut H) {
-        for ref elt in data.iter() {
-            elt.hash(state)
-        }
-    }
-}
-
-impl<T> Eq                       for Element<T> where T: Copy + Hash + Eq + PartialEq<T> {}
-impl<T> PartialEq<Element<T>> for Element<T> where T: Copy + Hash + Eq + PartialEq<T> {
-    fn eq(&self, other: &Self) -> bool {
-        match *self {
-            Element::Empty => match *other {
-                Element::Empty => true,
-                _ => false },
-            Element::Atom(ref x) => match *other {
-                Element::Atom(ref y) => x == y,
-                _ => false },
-            Element::Pattern(ref x) => match *other {
-                Element::Pattern(ref y) => hash::<_,HashAlgo>(x.deref()) == hash::<_,HashAlgo>(y.deref()),
-                _ => false }
-        }
-    }
-}
-
-
-//impl<T> WalkableExt for Element<T> where T: Copy + Hash {}
-
-impl<T> Pattern<T> for Element<T>
-where T: Eq + PartialEq + Hash + Copy + std::fmt::Debug {
-    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> where T: 'static {
-        match *self {
-            Element::Empty => Box::new(Element::Empty),
-            Element::Atom(ref x) => Box::new(Element::Atom(x.clone())),
-            Element::Pattern(ref x) => Box::new(Element::Pattern(x.clone_to_box()))
-        }
-    }
-
-    fn first_set<'a,'b>(&'a self, buf: &'b mut FlexBox) -> Ref<'b,Iterator<Item=T>> where 'a: 'b {
-        match *self {
-            Element::Empty => buf.store(iter::Empty::new()),
-            Element::Atom(ref atom) => buf.store(iter::Once::new(*atom)),
-            Element::Pattern(ref pat) => pat.first_set(buf)
-        }
-    }
-
-      // fn first_set(&self, buf: &'b mut [u8]) -> IterResult<T> {
-      //     match *self {
-      //         Element::Atom(ref atom) => {
-      //             if  buf.len() < std::mem::size_of::<Once<T>>() {
-      //                 Err(std::mem::size_of::<Once<T>>())
-      //             } else {
-      //                 let it = Once::new(atom);
-      //                 unsafe { memcpy(&mut buf[..],
-      //                                 std::mem::transmute::<_,&mut [u8]>(&mut it));
-      //                          Ok(std::mem::transmute::<_,&Iterator<Item=T>>(buf)) }
-      //             } },
-      //         _ => Err(0)
-      //     }
-      // }
-
-    fn is_fixed(&self) -> bool {
-        match *self {
-            Element::Empty => true,
-            Element::Atom(..) => true,
-            Element::Pattern(ref pat) => pat.is_fixed()
-        }
-    }
-
-    fn input_length_bounds(&self) -> (usize, Option<usize>) {
-        match *self {
-            Element::Empty => (0, Some(0)),
-            Element::Atom(..) => (1, Some(1)),
-            Element::Pattern(ref pat) => pat.input_length_bounds()
-        }
-    }
-}
-
-//impl<T> Iterable<IterBox<&'a <FirstSet<T> as WalkType>::Item>> for Element<T>
-/*impl<T> Iterable<Box<Iterator<Item=&'a <FirstSet<T> as WalkType>::Item>>> for Element<T>
-where T: 'a {
-    #[inline(always)]
-    fn iter(&'a self) -> Box<Iterator<Item=&'a Element<T>> + 'a> {//Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> /*IterBox<&'a <FirstSet<T> as WalkType>::Item>*/ {
-        Box::new(Once::new(self))
-    }
-}*/
-
-
-/*impl<T: Copy + Hash + Eq + PartialEq> Walkable<'a,FirstSet<T>> for Element<T>
-where T: 'a {
-    #[inline(always)]
-    fn iter(&'a self) -> Option<WalkIterator<FirstSet<T>>> {//Box<Iterator<Item=<FirstSet<T> as WalkType>::Item> + 'a> /*IterBox<&'a <FirstSet<T> as WalkType>::Item>*/ {
-        Some(Box::new(iter::Once::new(self)))
-    }
-
-    fn action(&'a self, element: &'a <FirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
-        match *element {
-            Element::Atom(..) => Action::new(Some(element), false, action::TERMINATE as u8),
-            Element::Pattern(..) => Action::new(Some(element), true, action::TERMINATE as u8)
-        }
-    }
-}*/
-
-impl<'a,T> IntoIterator for &'a Element<T> {
-    type Item = &'a Element<T>;
-    type IntoIter = iter::Once<&'a Element<T>>;
-    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-        iter::Once::new(self)
-    }
-}
-
-/*impl<T> Iterable<Element<T>> for Element<T> {
-    type Iterator = std::slice::Iter<Element<T>>;
-    fn iter<>(&self) -> std::slice::Iter<Element<T>> {
-        iter::Once::new(self)
-    }
-}*/
-
-
-impl<T> Walkable<AtomicFirstSet<T>> for Element<T> where T: Eq + PartialEq + Copy + Hash {
-    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
-        match *element {
-            Element::Atom(atom) => Action::new(Some(atom), false, action::TERMINATE as u8),
-            Element::Pattern(..) => Action::new(None, true, action::TERMINATE as u8)
-        }
-    }
-}
-
-impl<T> Nullable for Element<T> where T: Copy + Hash{
-    fn is_nullable(&self) -> bool {
-        match *self {
-            Element::Empty => true,
-            Element::Atom(..) => false,
-            Element::Pattern(ref pat) => pat.is_nullable(),
-        }
-    }
-}
-
-
-
-/* **************************************************************** */
-/// A sequence of atoms or subpatterns.
 #[derive(Debug,Clone)]
-pub struct Sequence<T> where T: Copy + Clone + Debug + Hash {
-    elements: Vec<Element<T>>
+pub struct Pattern<T: Debug + Copy + Clone + PartialOrd<T>> {
+    pub graph: Graph<T>,
+    entry: NodeID
 }
 
-impl<T: Copy + Hash> Hashable for Sequence<T> where T: Copy + Clone + Debug + Hash {
-    fn hash(&self, state: &mut Hasher) {
-        for ref elt in &(self.elements) {
-            <Element<T> as Hashable>::hash(elt, state);
-        }
-    }
-}
-
-impl<T: Copy + Hash> Hash for Sequence<T> where T: Copy + Clone + Debug + Hash  {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let x: &[Element<T>] = self.elements.as_ref();
-        x.hash(state)
-    }
-}
-
-impl<T> Sequence<T> where T: Copy + Clone + Debug + Hash  {
-    pub fn empty() -> Self {
-        Sequence{elements: Vec::new()}
-    }
-    pub fn new(elements: Vec<Element<T>>) -> Sequence<T> {
-        Sequence{elements: elements}
-    }
-}
-
-/*struct SequenceFirstSet<T> where T: 'a {
-    elements: &'a Vec<Element<T>>,
-    sub_iter: Option<Box<Iterator<Item=T>>>
-}
-
-impl<T> Iterator for SequenceFirstSet<T> {
-    type Item = T;
-    #[inline(always)]
-    fn next(&mut self) -> Option<T> {
-        loop {
-        match self.sub_iter {
-            Some(boxed) => {
-                match boxed.next() {
-                    Some(T) => T,
-                    None => {
-                        self.sub_iter = None;
-                    }
+impl Pattern<char> {
+    /** Create a subgraph describing the given expression, and return its
+     * entry and exit node IDs.
+     *
+     * @return Tuple containing the stand-alone graph's entry- and
+     * exit-node IDs. */
+    fn subgraph(g: &mut Graph<char>, expr: Expr) -> (NodeID, NodeID) {
+        let entry = g.add_node(Node::Entry);
+        Pattern::build_recursive(g, entry, None, expr)
     }
 
-    #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-    }
-}*/
-
-
-
-impl<T> Pattern<T> for Sequence<T>
-where T: Eq + PartialEq + Hash + Hashable + Copy + Debug {
-    fn clone_to_box(&self) -> Box<Pattern<T,Item=Element<T>>> {
-        Box::new(Sequence::from_iter(self.elements.collect()));
+    /** Append an edge to a graph after a given node, and (optionally) before
+     * a given node.  If the passed `_next` value is `None`, a new `Continue`
+     * node will be added.
+     *
+     * @return ID of the target node for the new edge.
+     */
+    fn append_edge(g: &mut Graph<char>, prev: NodeID, _next: Option<NodeID>, e: Edge<char>) -> (NodeID, NodeID) { 
+        let next = _next.unwrap_or_else(|| g.add_node(Node::Continue));
+        g.add_edge(prev, next, e);
+        (prev, next)
     }
 
 
-    fn first_set<'a,'b>(&'a self, buf: &'b mut FlexBox) -> Ref<'b,Iterator<Item=T>> where 'a: 'b {
-        buf.store(self.walk::<AtomicFirstSet<T>>())
-    }
+    /** Given a root-node ID, append a regular-expression's representation to
+     * a graph.
+     *
+     * @return ID of the exit node (final state) of the expression graph after
+     * the expression has been added.
+     */
+    // !!!FIXME!!! ensure that `next` value returned is as documented in all
+    // cases -- ensure we aren't returning a `next` that we've used as a `prev`
+    // to e.g. a subgraph.
+    fn build_recursive(g: &mut Graph<char>, mut prev: NodeID, next: Option<NodeID>, expr: Expr) -> (NodeID, NodeID) {
+        let new_next = match expr {
+            Expr::Literal{chars, casei} =>
+                // FIXME: for case-insensitive matches, we should add some sort
+                // of normalization preprocessing action to the node.
+                Self::append_edge(g, prev, next, if chars.len() > 1 { Edge::new(Element::Sequence(chars)) } else { Edge::new(Element::Atom(chars[0]))}).1,
+            Expr::AnyChar => Self::append_edge(g, prev, next, Edge::new(Element::Wildcard)).1,
+            Expr::AnyCharNoNL => Self::append_edge(g, prev, next, Edge::new_complement(Element::Atom('\n'))).1,
+            Expr::Class(c) => Self::append_edge(g, prev, next, Edge::new(Element::Class(c.into_iter().map(|cr| ClassRange { first: cr.start, last: cr.end }).collect()))).1,
+            Expr::StartLine => { let sg = Pattern::subgraph(g, Expr::parse(r"\A|\n").unwrap()).0;
+                                 Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::LookBehind(sg)))).1 },
+            Expr::EndLine => { let sg = Pattern::subgraph(g, Expr::parse(r"\z|\r?\n").unwrap()).0;
+                               Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::LookAhead(sg)))).1 },
+            Expr::StartText => Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::StartOfInput))).1,
+            Expr::EndText => Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::EndOfInput))).1,
 
-    fn is_fixed(&self) -> bool {
-        self.elements.iter().all(|ref elt| elt.is_fixed() )
-    }
-
-    fn input_length_bounds(&self) -> (usize, Option<usize>) {
-        let mut totals = (0usize, Some(0usize));
-        for ref elt in &(self.elements) {
-            let b = elt.input_length_bounds();
-            totals.0 += b.0;
-            if b.1.is_some() && totals.1.is_some() {
-                totals.1 = Some(b.1.unwrap() + totals.1.unwrap())
-            } else {
-                totals.1 = None
-            }
-        }
-        totals
-    }
-}
-
-
-impl<'a,T> IntoIterator for &'a Sequence<T>
-where T: Hash + Hashable + Copy + Debug {
-    type Item = &'a Element<T>;
-    type IntoIter = std::slice::Iter<'a,Element<T>>;
-
-    fn into_iter(self) -> <Self as IntoIterator>::IntoIter {
-        self.elements.iter()
-    }
-}
-
-impl<T> Walkable<AtomicFirstSet<T>> for Sequence<T>
-where T: Eq + PartialEq + Copy + Hash + Debug {
-    fn action<'a>(&'a self, element: &'a Element<T>) -> walk::Action<AtomicFirstSet<T>> {
-        match *element {
-            Element::Atom(atom) =>
-                Action::new(Some(atom), false, action::TERMINATE as u8),
-            Element::Pattern(ref pat) =>
-                Action::new(None, true, if pat.is_nullable() { 0 } else { action::TERMINATE as u8 })
-        }
-    }
-}
-
-
-/*impl<'a,T> Walkable<'a,FirstSet<'a,T>> for Sequence<T> where T: Copy + Hash + Eq + PartialEq {
-    #[inline(always)]
-    fn action(&'a self, element: &'a <FirstSet<'a,T> as WalkType>::Item) -> walk::Action<FirstSet<'a,T>> {
-        match *element {
-            Element::Atom(..) =>
-                Action::new(Some(element), false, action::TERMINATE as u8),
-            Element::Pattern(ref pat) =>
-                Action::new(Some(element), true, if pat.is_nullable() { 0 } else { action::TERMINATE as u8 })
-        }
-    }
-}*/
-
-impl<T> FromIterator<T> for Sequence<T> where T: Copy + Debug + Eq + PartialEq + Hash {
-    fn from_iter<I: IntoIterator<Item=T>>(v: I) -> Sequence<T> {
-        Sequence::new(v.map_in_place(|c| Element::Atom(c)))
-    }
-}
-
-impl<T> FromIterator<Element<T>> for Sequence<T> where T: Copy + Debug + Eq + PartialEq + Hash {
-    fn from_iter<I: IntoIterator<Item=Element<T>>>(v: I) -> Sequence<T> {
-        Sequence::new(v.into_iter().collect())
-    }
-}
-
-
-impl<T> Nullable for Sequence<T> where T: Copy + Debug + Eq + PartialEq + Hash {
-    fn is_nullable(&self) -> bool {
-        if self.elements.is_empty() { true }
-        else {
-            for elt in self.elements.iter() {
-                match *elt {
-                    Element::Atom(..) => return false,
-                    Element::Pattern(ref pat) => if ! pat.is_nullable() { return false; }
+            Expr::Group{e, ..} => return Pattern::build_recursive(g, prev, next, *e),
+            Expr::Repeat{e, r, greedy} => {
+                let (subgraph_entry, _) = Pattern::subgraph(g, *e);
+                let (min, max) = match r {
+                    Repeater::ZeroOrOne => (0, Some(1)),
+                    Repeater::ZeroOrMore => (0, None),
+                    Repeater::OneOrMore => (1, None),
+                    Repeater::Range{min: mn, max: mx} => (mn, mx)
+                };
+                Self::append_edge(g, prev, next, Edge::new(Element::Closure{pattern: subgraph_entry, min: min, max: max})).1 },
+            Expr::Concat(mut exprs) => {
+                if exprs.is_empty() { panic!("Invalid concatenation of nothing"); }
+                exprs.reverse();
+                while exprs.len() > 1 {
+                    let (_, _prev) = Self::build_recursive(g, prev, None, exprs.pop().unwrap());
+                    prev = _prev;
                 }
-            }
-            true
-        }
+                Self::build_recursive(g, prev, next, exprs.pop().unwrap()).1
+            },
+            Expr::Alternate(exprs) => {
+                let _next = next.unwrap_or_else(|| g.add_node(Node::Continue));
+                for expr in exprs {
+                    Pattern::build_recursive(g, prev, Some(_next), expr);
+                }
+                _next
+            },
+
+            // Why would we have an empty expression?
+            Expr::Empty => unreachable!(),
+
+            // FIXME: should we implement word boundaries?
+            Expr::WordBoundary => unreachable!(), /*Self::append_edge(g, prev, next, Edge::Anchor(Anchor::And(*/
+            Expr::NotWordBoundary => unreachable!(),
+        };
+        (prev, new_next)
+    }
+    fn build(expr: Expr) -> Pattern<char> {
+        let mut g = Graph::new();
+        // Build the graph describing the given expression.
+        let (entry, exit) = Pattern::subgraph(&mut g, expr);
+        /* Set the final node to "Accept" type.  */
+        *g.node_weight_mut(exit).unwrap() = Node::Accept;
+
+
+        return Pattern{graph: g, entry: entry};
     }
 }
 
-
-/*/* **************************************************************** */
-/// A set of alternatives.
-#[derive(Debug,Clone)]
-pub struct Union<T: Copy + Eq + Hash> {
-    elements: HashSet<Element<T>>,
-}
-
-
-impl<T: Copy + Eq + Hash> Union<T> {
-    pub fn new(elements: HashSet<Element<T>>) -> Union<T> {
-        Union{elements: elements}
-    }
-}
-
-impl<T> Pattern<T> for Union<T>
-where T: Eq + PartialEq + Hash + Copy + std::fmt::Debug {
-    fn is_fixed(&self) -> bool {
-        if self.elements.is_empty() { true }
-        else {
-            match self.elements.len() {
-                1 => self.elements.iter().next().unwrap().is_fixed(),
-                _ => false
-            }
-        }
-    }
-
-    fn input_length_bounds(&self) -> (usize, Option<usize>) {
-        let mut result = (0usize, Some(0usize));
-        for elt in self.elements.iter() {
-            let b = elt.input_length_bounds();
-            if b.0 < result.0 { result.0 = b.0 }
-
-            if b.1.is_some() && result.1.is_some() {
-                let Some(u) = b.1;
-                let Some(v) = result.1;
-                if u > v { result.1 = Some(u) }
-           } else {
-               result.1 = None
-           }
-
-        }
-        result
-    }
-}
-
-impl<T: Copy + Eq + Hash> Hashable for Union<T> {
-    fn hash(&self, state: &mut Hasher) {
-        for ref elt in &(self.elements) {
-            <Element<T> as Hashable>::hash(elt, state);
+impl Grammar<char> for Pattern<char> {
+    type ParseError = self::regex_syntax::Error;
+    fn parse_string<S: AsRef<str>>(s: S) -> Result<Pattern<char>,Self::ParseError> {
+        match Expr::parse(s.as_ref()) {
+            Ok(expr) => Ok(Pattern::build(expr)),
+            Err(err) => Err(err)
         }
     }
 }
-
-impl<T> Walkable<'a,AtomicFirstSet<T>> for Union<T> where T: Eq + PartialEq + Copy + Hash {
-    #[inline(always)]
-    fn iter<'a>(&'a self) -> Option<WalkIterator<AtomicFirstSet<'a,T>>> {
-        Some(Box::new(self.elements.iter()))
-    }
-
-    fn action<'a>(&'a self, element: &'a <AtomicFirstSet<'a,T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<'a,T>> {
-        match *element {
-            Element::Atom(atom) =>
-                Action::new(Some(atom), false, 0),
-            Element::Pattern(..) =>
-                Action::new(None, true, 0)
-        }
-    }
-}
-
-
-impl<T> Walkable<'a,FirstSet<T>> for Union<T> where T: Copy + Hash + Eq + PartialEq {
-    #[inline(always)]
-    fn iter(&'a self) -> Option<WalkIterator<FirstSet<T>>> {
-        Some(Box::new(self.elements.iter()))
-    }
-
-    #[inline(always)]
-    fn action(&'a self, element: &'a <FirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
-        match *element {
-            Element::Atom(..) =>
-                Action::new(Some(element), false, 0),
-            Element::Pattern(..) =>
-                Action::new(Some(element), true, 0)
-        }
-    }
-}
-
-
-impl<T> FromIterator<T> for Union<T>
-    where T: Copy + Eq + PartialEq + Hash {
-    fn from_iter<I: IntoIterator<Item=T>>(v: I) -> Union<T> {
-        Union::new(v.into_iter().map(|val| Element::Atom(val)).collect())
-    }
-}
-
-
-impl<T> Nullable for Union<T> where T: Copy + Hash + Eq {
-    fn is_nullable(&self) -> bool {
-        if self.elements.is_empty() { true }
-        else { self.elements.iter().any(|elt: &'a Element<T>| (*elt).is_nullable()) }
-   }
-}
-
-/* **************************************************************** */
-
-/* **************************************************************** */
-
-/// Anchor patterns, including absolute-position, look-ahead,
-/// look-behind types.
-pub mod anchor {
-    use std;
-    use std::marker::*;
-    use std::fmt::Debug;
-    use std::hash::{Hash,Hasher};
-
-    use super::*;
-    use super::walk::*;
-    use super::walk::Iterator as WalkIterator;
-    use super::super::util::hash::Hashable;
-
-    /// Absolute-position anchor pattern.
-    #[derive(Debug,Copy,Clone)]
-    #[repr(u8)]
-    #[allow(non_camel_case_types)]
-    pub enum Position {
-        BUFFER_START,
-        BUFFER_END
-    }
-
-    impl<T> Pattern<T> for Position
-        where T: Copy + Eq + PartialEq + Hash + Debug {
-        fn is_fixed(&self) -> bool { true }
-        fn input_length_bounds(&self) -> (usize, Option<usize>) {
-            (0, Some(0))
-        }
-    }
-
-    impl Hashable for Position {
-        fn hash(&self, state: &mut Hasher) {
-            use std::any::TypeId;
-            state.write_u64(*unsafe { std::mem::transmute::<_,&u64>(&TypeId::of::<Self>()) });
-            state.write_u8(*self as u8);
-        }
-    }
-
-
-    impl<T> Walkable<'a,AtomicFirstSet<T>> for Position  where T: Copy + Eq + PartialEq + Hash + Debug {
-        #[inline(always)]
-        fn iter(&'a self) -> Option<WalkIterator<AtomicFirstSet<T>>> { None }
-        fn action(&'a self, _: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
-            Action::new(None, false, 0)
-        }
-    }
-
-    impl<T> Walkable<'a,FirstSet<T>> for Position where T: Copy + Eq + PartialEq + Hash + Debug {
-        #[inline(always)]
-        fn iter(&'a self) -> Option<WalkIterator<FirstSet<T>>> { None }
-        fn action(&'a self, _: &'a <FirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
-            Action::new(None, false, 0)
-        }
-    }
-
-    impl Nullable for Position {
-        #[inline(always)]
-        fn is_nullable(&self) -> bool { true }
-    }
-
-    /* **************************************************************** */
-
-    /// Direction in which a pattern anchor should attempt to match
-    /// its pattern.
-    #[derive(Debug,Copy,Clone)]
-    pub enum Direction {
-        Backward,
-        Forward
-    }
-
-    /// Look-ahead or look-behind pattern anchor.
-    #[derive(Debug,Clone)]
-    pub struct Look<T> {
-        direction: Direction,
-        pattern: Box<Pattern<T>>
-    }
-
-    impl<T> Pattern<T> for Look<T> where T: Copy + Eq + Hash + std::fmt::Debug + Reflect {
-        fn is_fixed(&self) -> bool { self.pattern.is_fixed() }
-        fn input_length_bounds(&self) -> (usize, Option<usize>) {
-            self.pattern.input_length_bounds()
-        }
-    }
-
-
-    /// Remove a reference from a type.
-    ///
-    /// Used internally by some other cripes code.
-    #[doc(hidden)]
-    trait RemoveRef { type Type; }
-    impl<T> RemoveRef for &'a T { type Type = T; }
-
-
-    /// Horrific hack to clone a reference.  This should be used **only** until
-    /// I figure out why the borrow-checker doesn't like
-    /// pass-through functions.
-    macro_rules! clone_ref {
-        ($r: ident : $t: ty) => { {use std::mem::transmute;
-                                   let o: $t = transmute(transmute::<_,*const <$t as RemoveRef>::Type>($r));
-                                   o} };
-    }
-
-    impl<'b, 'a: 'b, T> Walkable<'a,FirstSet<T>> for Look<T> where T: Copy + Eq + PartialEq + Hash + Debug {
-        #[inline(always)]
-        fn iter(&'a self) -> Option<WalkIterator<FirstSet<T>>> {
-            <Pattern<T> as Walkable<'a,FirstSet<T>>>::iter(&*self.pattern)
-        }
-        fn action(&'a self, item: &'a <FirstSet<T> as WalkType>::Item) -> walk::Action<FirstSet<T>> {
-            self.pattern.action(unsafe { clone_ref!(item: &'a <FirstSet<T> as WalkType>::Item) })
-        }
-    }
-
-    impl<T> Walkable<'a,AtomicFirstSet<T>> for Look<T>  where T: Copy + Eq + PartialEq + Hash + Debug {
-        #[inline(always)]
-        fn iter(&'a self) -> Option<WalkIterator<AtomicFirstSet<T>>> {
-            <Pattern<T> as Walkable<'a,AtomicFirstSet<T>>>::iter(&(*self.pattern))
-        }
-        fn action(&'a self, item: &'a <AtomicFirstSet<T> as WalkType>::Item) -> walk::Action<AtomicFirstSet<T>> {
-            self.pattern.action(unsafe { clone_ref!(item: &'a <FirstSet<T> as WalkType>::Item) })
-        }
-    }
-
-    impl<T> Nullable for Look<T> {
-        #[inline(always)]
-        fn is_nullable(&self) -> bool { self.pattern.is_nullable() }
-    }
-
-    impl<T> Hashable for Look<T> where T: Reflect {
-        #[inline(always)]
-        fn hash(&self, state: &mut Hasher) {
-            state.write_u64(*unsafe { std::mem::transmute::<_,&u64>(&std::any::TypeId::of::<Look<'static,T>>()) });
-            <Pattern<T> as Hashable>::hash(&*self.pattern, state);
-        }
-    }
-}
-*/
