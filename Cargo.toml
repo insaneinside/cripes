@@ -12,5 +12,6 @@ name="test"
 path="test/mod.rs"
 
 [dependencies]
-petgraph = "*"
 regex-syntax = "*"
+num = "*"
+smallvec = "*"

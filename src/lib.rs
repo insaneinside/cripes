@@ -11,6 +11,9 @@
 #![feature(drop_in_place)]
 
 
+extern crate num;
+extern crate smallvec;
+
 #[macro_use]
 pub mod util;
 
