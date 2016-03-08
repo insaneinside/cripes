@@ -1,5 +1,6 @@
 #![crate_type = "rlib"]
 #![crate_name = "cripes"]
+#![warn(missing_docs)]
 
 #![feature(alloc)]
 
