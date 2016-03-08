@@ -1,4 +1,12 @@
-//! Graph types for pattern representation.
+//! Graph-based pattern representations for analysis and transformation of
+//! regular languages.
+//!
+//! Patterns are parameterized by the _kind_ of thing those patterns describe.
+//! Regular expressions, for example, are usually patterns of characters,
+//! i.e. `Pattern<char>`.
+//!
+//! By implementing Pattern<T>  builder for your
+
 extern crate petgraph;
 extern crate regex_syntax;
 use self::regex_syntax::{Expr,Repeater};
@@ -46,12 +54,19 @@ Display for Edge<T> {
 /// Non-consuming pattern matchers.
 #[derive(Debug,Copy,Clone)]
 pub enum Anchor {
+    /// Beginning of the input buffer.
     StartOfInput,
+    /// End of the input buffer.
     EndOfInput,
-    LookAhead(NodeID),
-    LookBehind(NodeID)
+    /// Match the *FA with entry at the given node, ahead of the
+    /// current position.
+    LookAhead(NodeId),
+    /// Match the *FA with entry at the given node, behind the
+    /// current position.
+    LookBehind(NodeId)
 }
 
+/// A range of atoms.
 #[derive(Debug,Copy,Clone)]
 pub struct ClassRange<T: Debug + Copy + Clone + PartialOrd<T>> {
     pub first: T,
@@ -87,6 +102,8 @@ impl<T: Debug + Copy + Clone+ PartialOrd<T>> Edge<T> {
     }
 }
 
+
+/// Description of a potential transition between parser states.
 #[derive(Debug,Clone)]
 /// A matchable pattern element.
 pub enum Element<T: Debug + Copy + Clone+ PartialOrd<T>> {
@@ -129,6 +146,7 @@ where Self: Sized {
     fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,Self::ParseError>;
 }
 
+/// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
 pub struct Pattern<T: Debug + Copy + Clone + PartialOrd<T>> {
     pub graph: Graph<T>,
@@ -147,8 +165,8 @@ impl Pattern<char> {
     }
 
     /** Append an edge to a graph after a given node, and (optionally) before
-     * a given node.  If the passed `_next` value is `None`, a new `Continue`
-     * node will be added.
+     * a given node.  If the passed `_next` value is `None`, a node will
+     * be added.
      *
      * @return ID of the target node for the new edge.
      */

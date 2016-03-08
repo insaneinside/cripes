@@ -104,6 +104,7 @@ use std::hash::{Hash,Hasher};
 /// Object-safe hash adaptor.  See the [module-level documentation](index.html)
 /// for details.
 pub trait Hashable {
+    /// Feed `self` to a Hasher object.
     fn hash(&self, state: &mut Hasher);
 }
 
@@ -117,6 +118,7 @@ impl Hashable for char {
 }
 
 
+/// Produce a one-time hash of a value using the standard Hasher interface.
 pub fn stdhash<T: Hash,H: Default + Hasher>(t: &T) -> u64 {
     let mut s = H::default();
     t.hash(&mut s);

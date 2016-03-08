@@ -4,10 +4,24 @@ use std::iter::ExactSizeIterator;
 
 /* **************************************************************** */
 /// An iterator that produces its input item exactly once.
+///
+/// ```rust
+/// #[macro_use] extern crate cripes;
+/// use cripes::util;
+/// use cripes::util::iter;
+/// # fn main() {
+/// let one_four_two = iter::Once::new(42);
+/// panic_unless!(one_four_two.count() == 1, "`Once` iterator should be valid for exactly one iteration.");
+/// # }
+/// ```
+///
+///
+///
 #[derive(Debug)]
 pub struct Once<T>(Option<T>);
 
 impl<T> Once<T> {
+    /// Create a `Once` iterator instance that will produce the given object.
     #[inline(always)]
     pub fn new(obj: T) -> Once<T> {
         Once(Some(obj))
@@ -44,6 +58,7 @@ impl<T> Iterator for Once<T> where T: Copy {
 pub struct Empty<T> { _marker: PhantomData<T> }
 
 impl<T> Empty<T> {
+    /// Create an empty iterator.
     #[inline(always)]
     pub fn new() -> Empty<T> {
         Empty{_marker: PhantomData}

@@ -3,6 +3,21 @@
 //! `FlexBox` provides a reusable `Box`-like storage mechanism.  Like `Box` it
 //! allows dynamic dispatch by wrapping of trait objects; however, it also
 //! allows the allocated memory to be used multiple times.
+//!
+//! ```rust
+//! use cripes::util::iter::Once;
+//! use cripes::util::flex_box::{FlexBox,Ref};
+//!
+//! fn some_iter<'a>(dest: &'a mut FlexBox) -> Ref<'a,Iterator<Item=u8>> {
+//!     dest.store(Once::new(42))
+//! }
+//!
+//! fn main() {
+//!     let mut flex_box = FlexBox::new();
+//!     let iter = some_iter(&mut flex_box);
+//!     println!("{:?}", iter.collect::<Vec<u8>>());
+//! }
+//! ```
 use std;
 use std::fmt;
 use std::ptr;
@@ -13,7 +28,7 @@ use std::ops::Drop;
 extern crate alloc;
 use self::alloc::heap::{allocate,deallocate,reallocate};
 
-/// A flexibly-sized byte container.
+/// A flexibly-sized, reusable `Box`-like container.
 pub struct FlexBox {
     buf: *mut u8,
     capacity: usize,
@@ -82,6 +97,9 @@ impl Drop for FlexBox {
     }
 }
 
+/// Reference to a live value stored in a `FlexBox`.  `Ref` directly manages
+/// the lifetime of the stored value: the value is dropped at the same time as
+/// the `Ref` that refers to it.
 pub struct Ref<'a,T: 'a + ?Sized>(&'a mut T);
 
 impl<'a,U: 'a + ?Sized, T: 'a + ?Sized + std::marker::Unsize<U>>
