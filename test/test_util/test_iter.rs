@@ -3,8 +3,9 @@ use cripes::util::iter::*;
 /// Test the `Once` iterator.
 #[test]
 fn test_once() {
-    let mut n = 0;
+    assert_eq!(1, Once::new(42).count());
 
+    let mut n = 0;
     let y = "foo";
     for something in Once::new(y) { n += 1; println!("{:?}", something); }
     assert_eq!(1, n);
