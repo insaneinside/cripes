@@ -7,52 +7,87 @@
 //!
 //! By implementing Pattern<T>  builder for your
 
-extern crate petgraph;
-extern crate regex_syntax;
-use self::regex_syntax::{Expr,Repeater};
-
-use std::error::Error;
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::iter::FromIterator;
 use std::result::Result;
 use std::fmt::{self,Display,Debug};
 
-pub mod transform;
+use dot;
+use anymap::any::CloneAny;
+use regex_syntax;
+use regex_syntax::{Expr,Repeater};
 
-pub type NodeID = petgraph::graph::NodeIndex<petgraph::graph::DefIndex>;
-pub type EdgeID = petgraph::graph::EdgeIndex<petgraph::graph::DefIndex>;
+use util::graph::{self,Index};
 
-/** A node within a grammar's flow graph.  Nodes represent points before and
- * immediately after a token has been consumed; they associate arbitrary
- * actions with parse points or parser "states". */
-#[derive(Debug,Copy,Clone)]
-pub enum Node<T: Debug + Copy + Clone + PartialOrd<T>> {
-    /// First node in a (sub)graph.
-    Entry,
+/// Trait-bounds requirements for atomic values in a pattern.
+pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
+impl<T> Atom for T where T: Debug + Copy + Clone + PartialOrd<T> {}
 
-    /// Nothing to do; continue the parse.
-    Continue,
+/// Primitive type used for node and edge indices in pattern graphs.
+type GraphIndex = u32;
 
-    /// user-specified action to be taken when a parser reaches the node.
-    Action(fn(Edge<T>)),
-    
-    /// accept the (sub)graph and return from the parse
-    Accept
+/// Wrapped node index.
+pub type NodeId = graph::NodeIndex<u32>;
+/// Wrapped edge index.
+pub type EdgeId = graph::EdgeIndex<u32>;
+
+
+// ================================================================
+// Nodes
+/** A node within a pattern's flow graph.
+
+    Points exist immediately before and after a token has been consumed; they
+    associate arbitrary actions with parse points or parser "states".
+ */
+#[derive(Copy,Clone,Debug)] pub struct Point {
+    /// Branching depth within the pattern.
+    depth: usize,
+
+    /// Next node at the same branching depth.
+    next: Option<NodeId>,
+
+    /// Whether or not this parse point represents an accepting state.
+    accept: bool
 }
 
-impl<T: Debug + Copy + Clone + PartialOrd<T>>
-Display for Node<T> {
+impl Point {
+    /** Create a new parse-point with the specified branch depth.
+     *
+     * The caller is responsible for ensuring that the point is placed at the
+     * specified depth.
+     */
+    pub fn new(depth: usize) -> Self {
+        Point{depth: depth, next: None, accept: false}
+    }
+
+    /// Get the branching depth of this node.
+    #[inline(always)]
+    pub fn depth(&self) -> usize { self.depth }
+
+    /// Check if the node represents an accepting state.
+    #[inline(always)]
+    pub fn is_accept(&self) -> bool { self.accept }
+
+    /// Set whether or not the node is an accepting state.
+    pub fn set_accept(&mut self, accept: bool) {
+        self.accept = accept;
+    }
+}
+
+impl Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         <Self as Debug>::fmt(self, f)
     }
 }
-impl<T: Debug + Copy + Clone + PartialOrd<T>>
-Display for Edge<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <Self as Debug>::fmt(self, f)
-    }
-}
+
+
+
+// ================================================================
+// Edges
 
 /// Non-consuming pattern matchers.
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug,Clone)]
 pub enum Anchor {
     /// Beginning of the input buffer.
     StartOfInput,
@@ -68,8 +103,10 @@ pub enum Anchor {
 
 /// A range of atoms.
 #[derive(Debug,Copy,Clone)]
-pub struct ClassRange<T: Debug + Copy + Clone + PartialOrd<T>> {
+pub struct ClassRange<T: Atom> {
+    /// First atom in the range.
     pub first: T,
+    /// Last atom in the range.
     pub last: T
 }
 
@@ -83,30 +120,55 @@ pub enum Polarity {
     INVERTED
 }
 
-/** Description of a potential transition between parser states.  `Edge`
- * specifies the conditions under which a parser is allowed to transition to
- * the linked state. */
+// ----------------------------------------------------------------
 
+/** `Edge` specifies the conditions under which a parser is allowed to
+ * transition to the linked state.
+ */
 #[derive(Debug,Clone)]
-pub struct Edge<T: Debug + Copy + Clone+ PartialOrd<T>> {
-    element: Element<T>,
+pub struct Edge<T: Atom> {
+    /** Transition that must (not) match the input when `polarity` is
+        `Polarity::NORMAL` (`Polarity::INVERTED`). */
+    input: Transition<T>,
+
+    /// Polarity of the match.
     polarity: Polarity
 }
 
-impl<T: Debug + Copy + Clone+ PartialOrd<T>> Edge<T> {
-    pub fn new(elt: Element<T>) -> Self {
-        Edge{element: elt, polarity: Polarity::NORMAL}
+impl<T: Atom> Edge<T> {
+    /// Create an edge for the given input transition with normal polarity.
+    pub fn new(input: Transition<T>) -> Self {
+        Edge{input: input, polarity: Polarity::NORMAL}
     }
-    pub fn new_complement(elt: Element<T>) -> Self {
-        Edge{element: elt, polarity: Polarity::INVERTED}
+    /// Create an edge for the given input transition with inverted polarity.
+    pub fn new_inverted(input: Transition<T>) -> Self {
+        Edge{input: input, polarity: Polarity::INVERTED}
+    }
+}
+
+// We implement Display for Edge to provide a more readable output from Graph.
+impl Display for Edge<char> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.input {
+            Transition::Atom(ref x) => {
+                if x.is_whitespace() || x.is_control() {
+                    write!(f, "'{}'", x.escape_default().collect::<String>()) }
+                else { write!(f, "'{}'", x) } },
+            Transition::Sequence(ref x) => write!(f, "'{}'", String::from_iter(x.iter().cloned())),
+            Transition::Wildcard => f.write_str("(any)"),
+            Transition::Repeat{min, max} => {
+                if let Some(max) = max { write!(f, "({}..{} times)", min, max) }
+                else { write!(f, "({}+ times)", min) } },
+            _ => <Self as Debug>::fmt(self, f)
+        }
+
     }
 }
 
 
 /// Description of a potential transition between parser states.
 #[derive(Debug,Clone)]
-/// A matchable pattern element.
-pub enum Element<T: Debug + Copy + Clone+ PartialOrd<T>> {
+pub enum Transition<T: Atom> {
     /// atomic literal value
     Atom(T),
 
@@ -127,30 +189,83 @@ pub enum Element<T: Debug + Copy + Clone+ PartialOrd<T>> {
 
     /** Subgraph reference (instantiation) by reference to that graph's
      * entry node. */
-    Subgraph(NodeID),
+    Subgraph(NodeId),
 
-    /// Arbitrary repetition.
-    Closure{pattern: NodeID, min: u32, max: Option<u32>},
+    /** Backwards edge. The `min` (and `max`, if present) value(s) specify the
+     * number of times that the edge may be followed, i.e.  */
+    Repeat {
+        /** Number of times the edge _must_ be followed before any other
+            transitions from the source node are allowed.  May be zero, in
+            which case other transitions are valid the first time the source
+            node is visited. */
+        min: u32,
+        
+        /** Maximum number of times the edge _may_ be followed.  If `None`,
+         * there is no limit. */
+        max: Option<u32> },
 }
 
-/** Graph representation of a grammar's DFA.  `Graph` is used to model the
- * DFA's control-flow and allow various transformations to be applied. */
-pub type Graph<T> = petgraph::Graph<Node<T>,Edge<T>,petgraph::Directed>;
 
-
-/// Any grammar type.
-pub trait Grammar<T: Debug + Copy + Clone + PartialOrd<T>>
-where Self: Sized {
-    type ParseError: Error;
-    /// Attempt to parse a `str` into an implementation instance.
-    fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,Self::ParseError>;
+impl<'a,T: Atom> dot::GraphWalk<'a,NodeId,EdgeId> for Pattern<T> {
+    fn nodes(&self) -> dot::Nodes<'a,NodeId> { self.graph.node_indices().collect() }
+    fn edges(&self) -> dot::Edges<'a,EdgeId> { self.graph.edge_indices().collect() }
+    fn source(&self, e: &EdgeId) -> NodeId {
+        if let Some((id, _)) = self.graph.edge_endpoints(*e) { id }
+        else { panic!("Invalid edge ID passed to `source`") }
+    }
+    fn target(&self, e: &EdgeId) -> NodeId {
+        if let Some((_, id)) = self.graph.edge_endpoints(*e) { id }
+        else { panic!("Invalid edge ID passed to `source`") }
+    }
 }
+
+// impl<'a, T: Atom> dot::Labeller<'a,NodeId,EdgeId> for Pattern<T> {
+//     fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new(format!("G{}", self.entry.index())).unwrap() }
+//     fn node_id(&'a self, n: &NodeId) -> dot::Id<'a> { dot::Id::new(format!("N{}", n.index())).unwrap() }
+//     fn edge_label(&'a self, e: &EdgeId) -> dot::LabelText<'a> {
+//         let edge = &self.graph[*e];
+//         dot::LabelText::LabelStr(format!("{:?}", edge).into())
+//     }
+// }
+impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
+    fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new(format!("G{}", self.entry.index())).unwrap() }
+    fn node_id(&'a self, n: &NodeId) -> dot::Id<'a> { dot::Id::new(format!("N{}", n.index())).unwrap() }
+    fn edge_label(&'a self, e: &EdgeId) -> dot::LabelText<'a> {
+        let edge = &self.graph[*e];
+        dot::LabelText::LabelStr(format!("{}", edge).into())
+    }
+    fn node_label(&'a self, n: &NodeId) -> dot::LabelText<'a> {
+        let point = &self.graph[*n];
+        dot::LabelText::LabelStr(format!("{} ({})", n.index(), point.depth()).into())
+    }
+    fn node_shape(&'a self, node: &NodeId) -> Option<dot::LabelText<'a>> {
+        let shape: &'static str =
+            if self.graph[*node].is_accept() { "doublecircle" }
+            else { "circle" };
+        Some(dot::LabelText::LabelStr(String::from(shape).into()))
+    }
+}
+// ================================================================
+// Patterns
 
 /// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
-pub struct Pattern<T: Debug + Copy + Clone + PartialOrd<T>> {
-    pub graph: Graph<T>,
-    entry: NodeID
+pub struct Pattern<T: Atom> {
+    /// Graph representation of the control-flow of the pattern's automaton.
+    pub graph: graph::Graph<Point,Edge<T>>,
+
+    /// Index of the node that serves as the main entry point for the graph.
+    pub entry: NodeId,
+
+    /// Stored node analyses
+    node_analyses: HashMap<(TypeId,NodeId),Box<CloneAny>>,
+
+    /// Stored edge analyses
+    edge_analyses: HashMap<(TypeId,EdgeId),Box<CloneAny>>
+}
+
+impl From<Expr> for Pattern<char> {
+    fn from(e: Expr) -> Self { Pattern::build(e) }
 }
 
 impl Pattern<char> {
@@ -159,8 +274,8 @@ impl Pattern<char> {
      *
      * @return Tuple containing the stand-alone graph's entry- and
      * exit-node IDs. */
-    fn subgraph(g: &mut Graph<char>, expr: Expr) -> (NodeID, NodeID) {
-        let entry = g.add_node(Node::Entry);
+    fn subgraph(g: &mut graph::Graph<Point,Edge<char>>, depth: usize, expr: Expr) -> (NodeId, NodeId) {
+        let entry = g.add_node(Point::new(depth));
         Pattern::build_recursive(g, entry, None, expr)
     }
 
@@ -170,48 +285,107 @@ impl Pattern<char> {
      *
      * @return ID of the target node for the new edge.
      */
-    fn append_edge(g: &mut Graph<char>, prev: NodeID, _next: Option<NodeID>, e: Edge<char>) -> (NodeID, NodeID) { 
-        let next = _next.unwrap_or_else(|| g.add_node(Node::Continue));
+    fn append_edge(g: &mut graph::Graph<Point,Edge<char>>, prev: NodeId, _next: Option<NodeId>, e: Edge<char>) -> (NodeId, NodeId) {
+        let next = _next.unwrap_or_else(|| { let lvl = g[prev].depth(); g.add_node(Point::new(lvl)) });
         g.add_edge(prev, next, e);
         (prev, next)
     }
 
 
-    /** Given a root-node ID, append a regular-expression's representation to
-     * a graph.
+    /// Convert a 
+    fn convert_class(c: regex_syntax::CharClass) -> Transition<char> {
+        // The `unwrap()` below is okay because the way regex_syntax is
+        // implemented, class ranges simply _cannot_ be empty.
+        let first = c.iter().cloned().nth(0).unwrap();
+
+        if c.len() > 1 || first.start != first.end {
+            Transition::Class(c.into_iter().map(|cr| ClassRange { first: cr.start, last: cr.end }).collect())
+        } else {
+            Transition::Atom(first.start)
+        }
+    }
+
+    /** Build the canonical NFA subgraph for an expression.
      *
-     * @return ID of the exit node (final state) of the expression graph after
-     * the expression has been added.
+     * @param g Graph object that should hold the expression's subgraph.
+     *
+     * @param prev Index of the node that serves as the entry point for
+     *     the subgraph.
+     *
+     * @param next When not `None`, specifies index of the exit node (final
+     *     state) of the expression graph after the expression's subgraph has
+     *     been added.
+     *
+     * @param expr `regex_syntax` expression to be added to the graph.
+     *
+     * @return Indices of the entry and exit nodes for the appended subgraph.
      */
-    // !!!FIXME!!! ensure that `next` value returned is as documented in all
-    // cases -- ensure we aren't returning a `next` that we've used as a `prev`
-    // to e.g. a subgraph.
-    fn build_recursive(g: &mut Graph<char>, mut prev: NodeID, next: Option<NodeID>, expr: Expr) -> (NodeID, NodeID) {
+    fn build_recursive(g: &mut graph::Graph<Point,Edge<char>>, mut prev: NodeId, next: Option<NodeId>, expr: Expr) -> (NodeId, NodeId) {
         let new_next = match expr {
             Expr::Literal{chars, casei} =>
                 // FIXME: for case-insensitive matches, we should add some sort
                 // of normalization preprocessing action to the node.
-                Self::append_edge(g, prev, next, if chars.len() > 1 { Edge::new(Element::Sequence(chars)) } else { Edge::new(Element::Atom(chars[0]))}).1,
-            Expr::AnyChar => Self::append_edge(g, prev, next, Edge::new(Element::Wildcard)).1,
-            Expr::AnyCharNoNL => Self::append_edge(g, prev, next, Edge::new_complement(Element::Atom('\n'))).1,
-            Expr::Class(c) => Self::append_edge(g, prev, next, Edge::new(Element::Class(c.into_iter().map(|cr| ClassRange { first: cr.start, last: cr.end }).collect()))).1,
-            Expr::StartLine => { let sg = Pattern::subgraph(g, Expr::parse(r"\A|\n").unwrap()).0;
-                                 Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::LookBehind(sg)))).1 },
-            Expr::EndLine => { let sg = Pattern::subgraph(g, Expr::parse(r"\z|\r?\n").unwrap()).0;
-                               Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::LookAhead(sg)))).1 },
-            Expr::StartText => Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::StartOfInput))).1,
-            Expr::EndText => Self::append_edge(g, prev, next, Edge::new(Element::Anchor(Anchor::EndOfInput))).1,
+                Self::append_edge(g, prev, next, Edge::new(if chars.len() > 1 { Transition::Sequence(chars) } else { Transition::Atom(chars[0])})).1,
+            Expr::AnyChar => Self::append_edge(g, prev, next, Edge::new(Transition::Wildcard)).1,
+            Expr::AnyCharNoNL => Self::append_edge(g, prev, next, Edge::new_inverted(Transition::Atom('\n'))).1,
+            Expr::Class(c) => {
+                let negated = c.clone().negate();
+                // Use the smallest possible set of characters.
+                Self::append_edge(g, prev, next, if negated.len() < c.len() {Edge::new_inverted(Self::convert_class(negated))} else {Edge::new(Self::convert_class(c))}).1
+            },
+            Expr::StartLine => unimplemented!(), /*{ let sg = Pattern::subgraph(g, Expr::parse(r"\A|\n").unwrap()).0;
+                                 Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::LookBehind(sg)))).1 },*/
+            Expr::EndLine => unimplemented!(), /*{ let sg = Pattern::subgraph(g, Expr::parse(r"\z|\r?\n").unwrap()).0;
+                               Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::LookAhead(sg)))).1 },*/
+            Expr::StartText => Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::StartOfInput))).1,
+            Expr::EndText => Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::EndOfInput))).1,
 
             Expr::Group{e, ..} => return Pattern::build_recursive(g, prev, next, *e),
+
             Expr::Repeat{e, r, greedy} => {
-                let (subgraph_entry, _) = Pattern::subgraph(g, *e);
-                let (min, max) = match r {
+                let (min, mut max) = match r {
                     Repeater::ZeroOrOne => (0, Some(1)),
                     Repeater::ZeroOrMore => (0, None),
                     Repeater::OneOrMore => (1, None),
                     Repeater::Range{min: mn, max: mx} => (mn, mx)
                 };
-                Self::append_edge(g, prev, next, Edge::new(Element::Closure{pattern: subgraph_entry, min: min, max: max})).1 },
+                /* The minimum repetition count, times the subgraph's length,
+                   gives the distance between its entry and exit nodes on the
+                   main graph.
+
+                     - For a minimum repetition count of zero the entry and
+                       exit nodes are one and the same, and no additional edges
+                       are required to handle repeated traversal of
+                       the subgraph.
+
+                     - For any minimum repetition count ≥ 1, we inline the
+                       subgraph's first occurrence.
+
+                       !!FIXME!!: method for specifying min/max repetition
+                           count(s) is not yet implemented for the NFA graph;
+                           instead we add a backwards edge (epsilon transition)
+                           that specifies the number of times it may or should
+                           be followed.]
+                   */
+                if min == 0 {
+                    Pattern::build_recursive(g, prev, Some(prev), *e);
+                    prev
+                } else {
+                    // Inline the first occurrence of the subgraph.
+                    let (subgraph_entry, subgraph_exit) = Pattern::build_recursive(g, prev, next, *e);
+
+                    /* FIXME: decide how to implement required repetitions.
+                       Directly inlining more than one copy of the subgraph
+                       could easily lead to excessive bloat during codegen, and
+                       provides less information to optimization passes about
+                       the intent (pattern repetition) of the transitions.
+                     */
+                    if let Some(_max) = max { max = Some(_max - 1); }
+                    Self::append_edge(g, subgraph_exit, Some(prev), Edge::new(Transition::Repeat{min: min - 1, max: max}));
+
+                    subgraph_exit
+                }
+            },
             Expr::Concat(mut exprs) => {
                 if exprs.is_empty() { panic!("Invalid concatenation of nothing"); }
                 exprs.reverse();
@@ -222,7 +396,7 @@ impl Pattern<char> {
                 Self::build_recursive(g, prev, next, exprs.pop().unwrap()).1
             },
             Expr::Alternate(exprs) => {
-                let _next = next.unwrap_or_else(|| g.add_node(Node::Continue));
+                let _next = next.unwrap_or_else(|| { let lvl = g[prev].depth(); g.add_node(Point::new(lvl)) });
                 for expr in exprs {
                     Pattern::build_recursive(g, prev, Some(_next), expr);
                 }
@@ -233,26 +407,25 @@ impl Pattern<char> {
             Expr::Empty => unreachable!(),
 
             // FIXME: should we implement word boundaries?
-            Expr::WordBoundary => unreachable!(), /*Self::append_edge(g, prev, next, Edge::Anchor(Anchor::And(*/
+            Expr::WordBoundary => unreachable!(), /*Self::append_edge(g, prev, next, Transition::Anchor(Anchor::And(*/
             Expr::NotWordBoundary => unreachable!(),
         };
         (prev, new_next)
     }
     fn build(expr: Expr) -> Pattern<char> {
-        let mut g = Graph::new();
+        let mut g = graph::Graph::new();
         // Build the graph describing the given expression.
-        let (entry, exit) = Pattern::subgraph(&mut g, expr);
-        /* Set the final node to "Accept" type.  */
-        *g.node_weight_mut(exit).unwrap() = Node::Accept;
+        let (entry, exit) = Pattern::subgraph(&mut g, 0, expr);
+        // Set the final node as an accepting state.
+        g[exit].set_accept(true);
 
 
-        return Pattern{graph: g, entry: entry};
+        return Pattern{graph: g, entry: entry,
+                       node_analyses: HashMap::new(), edge_analyses: HashMap::new()};
     }
-}
 
-impl Grammar<char> for Pattern<char> {
-    type ParseError = self::regex_syntax::Error;
-    fn parse_string<S: AsRef<str>>(s: S) -> Result<Pattern<char>,Self::ParseError> {
+    /// Attempt to parse a regular expression; if successful, return the
+    pub fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,regex_syntax::Error> {
         match Expr::parse(s.as_ref()) {
             Ok(expr) => Ok(Pattern::build(expr)),
             Err(err) => Err(err)

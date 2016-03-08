@@ -12,6 +12,8 @@ name="test"
 path="test/mod.rs"
 
 [dependencies]
+anymap = "*"
 regex-syntax = "*"
+dot = "*"
 num = "*"
 smallvec = "*"

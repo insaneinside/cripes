@@ -10,8 +10,11 @@
 #![feature(coerce_unsized)]
 
 
+extern crate dot;
 extern crate num;
+extern crate anymap;
 extern crate smallvec;
+extern crate regex_syntax;
 
 #[macro_use]
 pub mod util;
