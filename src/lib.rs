@@ -8,7 +8,6 @@
 #![feature(heap_api)]
 #![feature(unsize)]
 #![feature(coerce_unsized)]
-#![feature(drop_in_place)]
 
 
 extern crate num;
