@@ -346,9 +346,12 @@ impl<N: Data, E: Data, Ix: IndexType> Graph<N, E, Ix> {
     pub fn add_edges<'a, D>(&mut self, edges: &'a [D]) where D: 'a, <Self as Types>::EdgeType: From<&'a D> {
         for e in edges.iter() {
             let edge = <Self as Types>::EdgeType::from(e);
+            let srcidx = edge.source.index();
+            let destidx = edge.target.index();
+            self.edges.push(edge);
             let index = EdgeIndex::new(self.edges.len() - 1);
-            self.nodes[edge.source.index()].add_outgoing_edge(index);
-            self.nodes[edge.target.index()].add_incoming_edge(index);
+            self.nodes[srcidx].add_outgoing_edge(index);
+            self.nodes[destidx].add_incoming_edge(index);
         }
     }
 
