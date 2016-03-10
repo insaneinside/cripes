@@ -17,7 +17,7 @@ pub trait Algorithm: Default {
         where G: Graph;
 }
 
-// We can use free-standing functions as visitors.
+// We can use free-standing functions as visit algorithms.
 impl<G: Graph, F> Algorithm for F
     where F: FnMut(&G, <G as Graph>::NodeId) -> Option<<G as Graph>::EdgeId> {
     fn next<G>(&mut self, g: &G, n: <G as Graph>::NodeId) -> Option<<G as Graph>::EdgeId> {
