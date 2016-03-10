@@ -18,7 +18,7 @@ use anymap::any::CloneAny;
 use regex_syntax;
 use regex_syntax::{Expr,Repeater};
 
-use util::graph::{self,Index};
+use util::graph::{self,Id as GraphID};
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
@@ -40,30 +40,18 @@ pub type EdgeId = graph::EdgeIndex<u32>;
     Points exist immediately before and after a token has been consumed; they
     associate arbitrary actions with parse points or parser "states".
  */
-#[derive(Copy,Clone,Debug)] pub struct Point {
-    /// Branching depth within the pattern.
-    depth: usize,
-
-    /// Next node at the same branching depth.
-    next: Option<NodeId>,
-
+#[derive(Copy,Clone,Debug)]
+pub struct Point {
     /// Whether or not this parse point represents an accepting state.
     accept: bool
 }
 
 impl Point {
-    /** Create a new parse-point with the specified branch depth.
-     *
-     * The caller is responsible for ensuring that the point is placed at the
-     * specified depth.
+    /** Create a new parse-point.
      */
-    pub fn new(depth: usize) -> Self {
-        Point{depth: depth, next: None, accept: false}
+    pub fn new() -> Self {
+        Point{accept: false}
     }
-
-    /// Get the branching depth of this node.
-    #[inline(always)]
-    pub fn depth(&self) -> usize { self.depth }
 
     /// Check if the node represents an accepting state.
     #[inline(always)]
@@ -199,7 +187,7 @@ pub enum Transition<T: Atom> {
             which case other transitions are valid the first time the source
             node is visited. */
         min: u32,
-        
+
         /** Maximum number of times the edge _may_ be followed.  If `None`,
          * there is no limit. */
         max: Option<u32> },
@@ -235,8 +223,7 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
         dot::LabelText::LabelStr(format!("{}", edge).into())
     }
     fn node_label(&'a self, n: &NodeId) -> dot::LabelText<'a> {
-        let point = &self.graph[*n];
-        dot::LabelText::LabelStr(format!("{} ({})", n.index(), point.depth()).into())
+        dot::LabelText::LabelStr(format!("{}", n.index()).into())
     }
     fn node_shape(&'a self, node: &NodeId) -> Option<dot::LabelText<'a>> {
         let shape: &'static str =
@@ -248,11 +235,14 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
 // ================================================================
 // Patterns
 
+/// Graph type used for patterns.
+pub type Graph<T: Atom> = graph::WeightedGraph<Point,Edge<T>>;
+
 /// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
 pub struct Pattern<T: Atom> {
     /// Graph representation of the control-flow of the pattern's automaton.
-    pub graph: graph::Graph<Point,Edge<T>>,
+    pub graph: Graph<T>,
 
     /// Index of the node that serves as the main entry point for the graph.
     pub entry: NodeId,
@@ -274,8 +264,8 @@ impl Pattern<char> {
      *
      * @return Tuple containing the stand-alone graph's entry- and
      * exit-node IDs. */
-    fn subgraph(g: &mut graph::Graph<Point,Edge<char>>, depth: usize, expr: Expr) -> (NodeId, NodeId) {
-        let entry = g.add_node(Point::new(depth));
+    fn subgraph(g: &mut Graph<char>, expr: Expr) -> (NodeId, NodeId) {
+        let entry = g.add_node(Point::new());
         Pattern::build_recursive(g, entry, None, expr)
     }
 
@@ -285,14 +275,14 @@ impl Pattern<char> {
      *
      * @return ID of the target node for the new edge.
      */
-    fn append_edge(g: &mut graph::Graph<Point,Edge<char>>, prev: NodeId, _next: Option<NodeId>, e: Edge<char>) -> (NodeId, NodeId) {
-        let next = _next.unwrap_or_else(|| { let lvl = g[prev].depth(); g.add_node(Point::new(lvl)) });
+    fn append_edge(g: &mut Graph<char>, prev: NodeId, _next: Option<NodeId>, e: Edge<char>) -> (NodeId, NodeId) {
+        let next = _next.unwrap_or_else(|| g.add_node(Point::new()));
         g.add_edge(prev, next, e);
         (prev, next)
     }
 
 
-    /// Convert a 
+    /// Convert a
     fn convert_class(c: regex_syntax::CharClass) -> Transition<char> {
         // The `unwrap()` below is okay because the way regex_syntax is
         // implemented, class ranges simply _cannot_ be empty.
@@ -320,7 +310,7 @@ impl Pattern<char> {
      *
      * @return Indices of the entry and exit nodes for the appended subgraph.
      */
-    fn build_recursive(g: &mut graph::Graph<Point,Edge<char>>, mut prev: NodeId, next: Option<NodeId>, expr: Expr) -> (NodeId, NodeId) {
+    fn build_recursive(g: &mut Graph<char>, mut prev: NodeId, next: Option<NodeId>, expr: Expr) -> (NodeId, NodeId) {
         let new_next = match expr {
             Expr::Literal{chars, casei} =>
                 // FIXME: for case-insensitive matches, we should add some sort
@@ -372,7 +362,7 @@ impl Pattern<char> {
                     prev
                 } else {
                     // Inline the first occurrence of the subgraph.
-                    let (subgraph_entry, subgraph_exit) = Pattern::build_recursive(g, prev, next, *e);
+                    let (_, subgraph_exit) = Pattern::build_recursive(g, prev, next, *e);
 
                     /* FIXME: decide how to implement required repetitions.
                        Directly inlining more than one copy of the subgraph
@@ -396,7 +386,7 @@ impl Pattern<char> {
                 Self::build_recursive(g, prev, next, exprs.pop().unwrap()).1
             },
             Expr::Alternate(exprs) => {
-                let _next = next.unwrap_or_else(|| { let lvl = g[prev].depth(); g.add_node(Point::new(lvl)) });
+                let _next = next.unwrap_or_else(|| g.add_node(Point::new()) );
                 for expr in exprs {
                     Pattern::build_recursive(g, prev, Some(_next), expr);
                 }
@@ -413,9 +403,9 @@ impl Pattern<char> {
         (prev, new_next)
     }
     fn build(expr: Expr) -> Pattern<char> {
-        let mut g = graph::Graph::new();
+        let mut g = Graph::new();
         // Build the graph describing the given expression.
-        let (entry, exit) = Pattern::subgraph(&mut g, 0, expr);
+        let (entry, exit) = Pattern::subgraph(&mut g, expr);
         // Set the final node as an accepting state.
         g[exit].set_accept(true);
 
