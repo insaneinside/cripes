@@ -22,7 +22,7 @@ use std::marker::PhantomData;
 use std::iter::{Chain,Iterator};
 
 
-//pub mod visit;
+pub mod visit;
 
 
 // ================================================================

@@ -13,6 +13,7 @@
 extern crate dot;
 extern crate num;
 extern crate anymap;
+extern crate bit_vec;
 extern crate smallvec;
 extern crate regex_syntax;
 
