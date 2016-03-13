@@ -22,7 +22,7 @@ use std::marker::PhantomData;
 use std::iter::{Chain,Iterator,DoubleEndedIterator};
 
 pub mod visit;
-
+use self::visit::Visit;
 
 // ================================================================
 // Indices: types used to identify nodes and edges.
@@ -327,6 +327,15 @@ pub trait Graph {
 
     /// Count the number of edges in the graph.
     fn edge_count(&self) -> usize;
+
+    /// Iterate over the graph using a rooted algorithm.
+    ///
+    /// Rooted algorithms are those that operate using a pre-defined root node
+    /// or nodes.
+    fn iter<A: visit::RootedAlgorithm<Self>>(&self, entry: Self::NodeId) -> visit::VisitorIter<Self, visit::Visitor<Self, A>>
+        where Self: Sized {
+        visit::Visitor::new(self, entry.into()).into_iter(self)
+    }
 }
 
 /// Iterator over some node's direct successors in a particular graph.
