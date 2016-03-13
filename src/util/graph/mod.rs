@@ -258,16 +258,73 @@ pub trait Graph {
     /// Concrete edge type used by a graph.
     type Edge: Edge<Self::NodeId>;
 
+    // --------------------------------
+
     /// Add an explicitly-specified node to the graph, returning its unique
     /// identifier.
     fn add_node(&mut self, n: Self::Node) -> Self::NodeId;
+
+    /// Check if a node ID is valid for this graph.
+    fn contains_node(&self, n: Self::NodeId) -> bool;
+
+    /// Count the number of nodes in the graph.
+    fn node_count(&self) -> usize;
+
+    /// Fetch an iterator over the direct successors of a node.
+    fn direct_successors(&self, n: Self::NodeId) -> Successors<Self>
+        where Self: Sized;
+
+    // --------------------------------
 
     /// Add an explicitly-specified edge to the graph, returning its
     /// unique identifier.
     fn add_edge(&mut self, e: Self::Edge) -> Self::EdgeId;
 
-    /// Count the number of nodes in the graph.
-    fn node_count(&self) -> usize;
+    /// Convert all elements in a slice to edges, and add them to the graph.
+    ///
+    /// Each element of the slice can be any type convertible to an edge using
+    /// `std::convert::From`; at the time of writing this means one of two
+    /// tuple forms:
+    ///
+    ///   * `(source_node_index, target_node_index, payload)`, where the edge
+    ///     is fully specified as arguments to `add_edge`, or
+    ///   * `(source_node_index, target_node_index)`, where the edge's payload
+    ///     is created using the `Default` trait.
+    ///
+    /// ```rust
+    /// use cripes::util::graph::*;
+    ///
+    /// # fn main() {
+    /// let mut g = WeightedGraph::<(),(),u8>::new();
+    /// let n0 = g.add_node(());
+    /// let n1 = g.add_node(());
+    /// let n2 = g.add_node(());
+    /// let n3 = g.add_node(());
+    ///
+    /// g.add_edges(&[(n0, n1), (n1, n2), (n1, n3), (n2, n3), (n3, n2)]);
+    ///
+    /// # }
+    /// ```
+    fn add_edges<'a, D>(&mut self, edges: &'a [D]) where D: 'a, Self::Edge: From<&'a D> {
+        for e in edges.iter() {
+            self.add_edge(Self::Edge::from(e));
+        }
+    }
+
+    /// Check if an edge ID is valid for this graph.
+    fn contains_edge(&self, e: Self::EdgeId) -> bool;
+
+    /// Fetch the IDs of an edge's source and target nodes.
+    ///
+    /// @return A tuple containing the requested indices, or `None` if the
+    ///     specified edge ID is invalid.
+    fn edge_endpoints(&self, e: Self::EdgeId) -> Option<(Self::NodeId, Self::NodeId)>;
+
+    /// Fetch the index of the node from which a given edge originates.
+    fn edge_source(&self, e: Self::EdgeId) -> Option<Self::NodeId>;
+
+    /// Fetch the index of the node at which a given edge terminates.
+    fn edge_target(&self, e: Self::EdgeId) -> Option<Self::NodeId>;
 
     /// Count the number of edges in the graph.
     fn edge_count(&self) -> usize;
@@ -292,6 +349,18 @@ impl<N, E, Ix> Graph for WeightedGraph<N, E, Ix>
         NodeIndex::new(self.nodes.len() - 1)
     }
 
+    fn direct_successors(&self, n: Self::NodeId) -> Successors<Self> {
+        Successors{graph: self, iter: self.nodes[n.index()].outgoing_edges()}
+    }
+
+    fn contains_node(&self, n: Self::NodeId) -> bool {
+        n.index() < self.nodes.len()
+    }
+
+    fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     fn add_edge(&mut self, e: Self::Edge) -> Self::EdgeId {
         let srcidx = e.source();
         let destidx = e.target();
@@ -306,9 +375,29 @@ impl<N, E, Ix> Graph for WeightedGraph<N, E, Ix>
         index
     }
 
-    fn node_count(&self) -> usize {
-        self.nodes.len()
+    fn contains_edge(&self, e: Self::EdgeId) -> bool {
+        e.index() < self.edges.len()
     }
+
+    fn edge_source(&self, e: EdgeIndex<Ix>) -> Option<NodeIndex<Ix>> {
+        if e.index() < self.edges.len() { Some(self.edges[e.index()].source) }
+        else { None }
+    }
+
+    fn edge_target(&self, e: EdgeIndex<Ix>) -> Option<NodeIndex<Ix>> {
+        if e.index() < self.edges.len() { Some(self.edges[e.index()].target) }
+        else { None }
+    }
+
+    fn edge_endpoints(&self, e: EdgeIndex<Ix>) -> Option<(NodeIndex<Ix>, NodeIndex<Ix>)> {
+        if e.index() < self.edges.len() {
+            let ref edge = self.edges[e.index()];
+            Some((edge.source, edge.target))
+        } else {
+            None
+        }
+    }
+
     fn edge_count(&self) -> usize {
         self.edges.len()
     }
@@ -388,67 +477,9 @@ impl<N: Data, E: Data, Ix: IndexType> WeightedGraph<N, E, Ix> {
         edge
     }
 
-    /// Convert all elements in a slice to edges, and add them to the graph.
-    ///
-    /// Each element of the slice can be any type convertible to an edge using
-    /// `std::convert::From`; at the time of writing this means one of two
-    /// tuple forms:
-    ///
-    ///   * `(source_node_index, target_node_index, payload)`, where the edge
-    ///     is fully specified as arguments to `add_edge`, or
-    ///   * `(source_node_index, target_node_index)`, where the edge's payload
-    ///     is created using the `Default` trait.
-    ///
-    /// ```rust
-    /// use cripes::util::graph::*;
-    ///
-    /// # fn main() {
-    /// let mut g = WeightedGraph::<(),(),u8>::new();
-    /// let n0 = g.add_node(());
-    /// let n1 = g.add_node(());
-    /// let n2 = g.add_node(());
-    /// let n3 = g.add_node(());
-    ///
-    /// g.add_edges(&[(n0, n1), (n1, n2), (n1, n3), (n2, n3), (n3, n2)]);
-    ///
-    /// # }
-    /// ```
-    pub fn add_edges<'a, D>(&mut self, edges: &'a [D]) where D: 'a, <Self as Graph>::Edge: From<&'a D> {
-        for e in edges.iter() {
-            <Self as Graph>::add_edge(self, <Self as Graph>::Edge::from(e));
-        }
-    }
-
-
     /// Fetch an iterator over the indices of all edges in the graph.
     pub fn edge_indices(&self) -> Indices<EdgeIndex<Ix>> {
         Indices::new(0..self.edges.len())
-    }
-
-    /// Fetch the index of the node from which a given edge originates.
-    pub fn edge_source(&self, e: EdgeIndex<Ix>) -> Option<NodeIndex<Ix>> {
-        if e.index() < self.edges.len() { Some(self.edges[e.index()].source) }
-        else { None }
-    }
-
-
-    /// Fetch the index of the node at which a given edge terminates.
-    pub fn edge_target(&self, e: EdgeIndex<Ix>) -> Option<NodeIndex<Ix>> {
-        if e.index() < self.edges.len() { Some(self.edges[e.index()].target) }
-        else { None }
-    }
-
-    /// Fetch the indices of an edge's source and target nodes.
-    ///
-    /// @return A tuple containing the requested indices, or `None` if the
-    ///     specified edge index does not refer to a valid edge.
-    pub fn edge_endpoints(&self, e: EdgeIndex<Ix>) -> Option<(NodeIndex<Ix>, NodeIndex<Ix>)> {
-        if e.index() < self.edges.len() {
-            let ref edge = self.edges[e.index()];
-            Some((edge.source, edge.target))
-        } else {
-            None
-        }
     }
 }
 
