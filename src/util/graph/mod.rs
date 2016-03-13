@@ -36,11 +36,12 @@ pub type DefaultIndexType = u32;
 pub trait IndexType: Copy + Eq + Hash + Ord + Debug + NumCast + ToPrimitive + 'static {}
 impl<T> IndexType for T where T: Copy + Eq + Hash + Ord + Debug + NumCast + ToPrimitive + 'static {}
 
-/// Interface provided by wrapped node or edge index types.
+/// Interface provided by node and edge identifiers.
 pub trait Id: Copy + Debug {
     /// Create a new index object with the given value.
     fn new(v: usize) -> Self;
-    /// Retrieve the underlying integer value of the index object.
+
+    /// Retrieve the underlying integer value of the identifier.
     fn index(&self) -> usize;
 }
 
@@ -110,7 +111,7 @@ impl<T> Data for T where T: Clone + Debug {}
 // ----------------------------------------------------------------
 // Edge
 
-/// Any edge type used by a graph.
+/// Any directed edge type used by a graph.
 pub trait Edge<NodeId: Id> {
     /// Get index of the edge's source node.
     fn source(&self) -> NodeId;
@@ -119,7 +120,7 @@ pub trait Edge<NodeId: Id> {
     fn target(&self) -> NodeId;
 }
 
-/// Internal type used to store edge-related data.
+/// Weighted directed edge.
 #[derive(Clone,Debug)]
 pub struct WeightedEdge<T: Data, I: Id> {
     source: I,
