@@ -18,7 +18,7 @@ use anymap::any::CloneAny;
 use regex_syntax;
 use regex_syntax::{Expr,Repeater};
 
-use util::graph::{self,Id as GraphID};
+use util::graph::{self,Graph as Graphlike,Id as GraphID};
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
