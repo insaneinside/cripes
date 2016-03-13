@@ -19,8 +19,7 @@ use std::slice;
 use std::hash::{Hash,Hasher};
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::iter::{Chain,Iterator};
-
+use std::iter::{Chain,Iterator,DoubleEndedIterator};
 
 pub mod visit;
 
@@ -329,6 +328,26 @@ pub trait Graph {
     /// Count the number of edges in the graph.
     fn edge_count(&self) -> usize;
 }
+
+/// Iterator over some node's direct successors in a particular graph.
+pub struct Successors<'a, G: Graph>
+    where G: 'a, <G as Graph>::EdgeId: 'a {
+    graph: &'a G,
+    iter: slice::Iter<'a, <G as Graph>::EdgeId>
+}
+impl<'a,G: 'a + Graph> Iterator for Successors<'a,G> {
+    type Item = <G as Graph>::NodeId;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|id| self.graph.edge_target(*id).unwrap())
+    }
+}
+
+impl<'a,G: 'a + Graph> DoubleEndedIterator for Successors<'a,G> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back().map(|id| self.graph.edge_target(*id).unwrap())
+    }
+}
+
 
 /// Directed graph with user-defined node and edge weights.
 #[derive(Clone,Debug)]
