@@ -61,6 +61,8 @@ impl FlexBox {
                 } else if self.capacity < size || self.align < align {
                     reallocate(self.buf, self.capacity, size, align)
                 } else {
+                    // We use a null value for the new-buffer pointer to
+                    // indicate that no (re)allocation is necessary.
                     ptr::null_mut()
                 };
 
