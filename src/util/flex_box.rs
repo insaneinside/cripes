@@ -17,6 +17,33 @@
 //!     println!("{:?}", iter.collect::<Vec<u8>>());
 //! }
 //! ```
+//!
+//! It would be unsafe to store into a FlexBox that already holds a live value;
+//! luckily Rust's borrow rules prevent this from happening.  The following
+//! example wouldn't compile.
+//!
+//! ```rust,compile_fail
+//! use cripes::util::flex_box::FlexBox;
+//!
+//! fn main() {
+//!     let mut b = FlexBox::new();
+//!     let x = b.store(1);
+//!     let y = b.store(2);  // error: cannot borrow `b` as mutable more than once at a time
+//! }
+//! ```
+//!
+//! This, however, is fine.
+//!
+//! ```rust
+//! use cripes::util::flex_box::FlexBox;
+//!
+//! fn main() {
+//!     let mut b = FlexBox::new();
+//!     { let x = b.store(1); }
+//!     let y = b.store(2);  // okay: `x` was dropped at the end of the block statement
+//! }
+//! ```
+
 use std;
 use std::fmt;
 use std::ptr;
