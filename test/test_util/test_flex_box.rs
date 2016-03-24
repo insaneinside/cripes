@@ -1,6 +1,7 @@
 //! Test module for `cripes::util::flex_box`, which provides flexibly-sized
 //! reusable boxes.
 
+use std;
 use cripes::util::flex_box::*;
 
 #[test]
@@ -103,8 +104,7 @@ fn test_store_indirect() {
 }
 
 fn store_and_return_iterator<'a,I: 'a>(b: &'a mut FlexBox) -> Ref<'a,Iterator<Item=I>> {
-    use cripes::util::iter;
-    b.store(iter::Empty::new())
+    b.store(std::iter::empty::<I>())
 }
 
 
@@ -113,8 +113,6 @@ fn store_and_return_iterator<'a,I: 'a>(b: &'a mut FlexBox) -> Ref<'a,Iterator<It
 /// potentially via chained calls to subobjects.  This is mostly
 /// a compile-time check.
 fn test_trait_store_iterator_chained() {
-    use cripes::util::iter;
-
     trait StoresIterator<T> {
         fn give_me_an_iterator<'b>(&self, b: &'b mut FlexBox) -> Ref<'b, Iterator<Item=T>>
             where T: 'b;
@@ -136,7 +134,7 @@ fn test_trait_store_iterator_chained() {
     impl<T: Copy> StoresIterator<T> for HasIterator<T> {
         fn give_me_an_iterator<'b>(&self, b: &'b mut FlexBox) -> Ref<'b,Iterator<Item=T>>
         where T: 'b {
-            b.store(iter::Once::new(self.value))
+            b.store(std::iter::once(self.value))
         }
     }
 

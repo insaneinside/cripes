@@ -5,11 +5,10 @@
 //! allows the allocated memory to be used multiple times.
 //!
 //! ```rust
-//! use cripes::util::iter::Once;
 //! use cripes::util::flex_box::{FlexBox,Ref};
 //!
 //! fn some_iter<'a>(dest: &'a mut FlexBox) -> Ref<'a,Iterator<Item=u8>> {
-//!     dest.store(Once::new(42))
+//!     dest.store(std::iter::once(42))
 //! }
 //!
 //! fn main() {
