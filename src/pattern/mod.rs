@@ -234,7 +234,7 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
 // Patterns
 
 /// Graph type used for patterns.
-pub type Graph<T: Atom> = graph::WeightedGraph<Point,Edge<T>>;
+pub type Graph<T> = graph::WeightedGraph<Point,Edge<T>>;
 
 /// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
