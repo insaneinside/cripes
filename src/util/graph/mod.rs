@@ -18,7 +18,7 @@ pub mod interface;
 pub mod visit;
 
 pub use self::common::{EdgeIndex,NodeIndex};
-pub use self::weighted::{WeightedGraph,WeightedEdge,WeightedNode};
+pub use self::weighted::{Graph as WeightedGraph, Edge as WeightedEdge, Node as WeightedNode};
 pub use self::interface::{Id,Edge,Node,Graph};
 
 /// Produce `impl` items on some trait for several structurally-identical types.

@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use smallvec::SmallVec;
 
 use super::iter::{Indices,Successors};
-use super::interface::{Id,Edge,Node,Graph};
+use super::interface::{self, Id, Node as INode, Edge as IEdge};
 use super::common::{IndexType,NodeIndex,EdgeIndex,DefaultIndexType};
 
 /// Trait bounds for types used as edge and node data payloads.
@@ -19,40 +19,40 @@ impl<T> Data for T where T: Clone + Debug {}
 
 /// Weighted edge type.
 #[derive(Clone,Debug)]
-pub struct WeightedEdge<T: Data, I: Id> {
+pub struct Edge<T: Data, I: Id> {
     source: I,
     target: I,
     data: T
 }
 
-impl<T, I> Edge<I> for WeightedEdge<T, I>
+impl<T, I> interface::Edge<I> for Edge<T, I>
     where T: Data, I: Id {
     impl_basic_edge!();
 }
 
-impl<T: Data, I: Id> WeightedEdge<T, I> {
+impl<T: Data, I: Id> Edge<T, I> {
     /// Create an edge with the given source & target node indices and
     /// weight data.
     pub fn new(source: I, target: I, data: T) -> Self {
-        WeightedEdge{source: source, target: target, data: data}
+        Edge{source: source, target: target, data: data}
     }
 }
 ///
-impl<T: Data, I: Id> std::ops::Deref for WeightedEdge<T, I> {
+impl<T: Data, I: Id> std::ops::Deref for Edge<T, I> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<T: Data, I: Id, I2: Copy> From<(I2, I2)> for WeightedEdge<T, I>
+impl<T: Data, I: Id, I2: Copy> From<(I2, I2)> for Edge<T, I>
     where T: Default, I: From<I2> {
     fn from(u: (I2, I2)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), Default::default())
     }
 }
 
-impl<T: Data, I: Id, I2: Copy> From<(I2, I2, T)> for WeightedEdge<T, I>
+impl<T: Data, I: Id, I2: Copy> From<(I2, I2, T)> for Edge<T, I>
     where I: From<I2> {
     fn from(u: (I2, I2, T)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), u.2)
@@ -60,13 +60,13 @@ impl<T: Data, I: Id, I2: Copy> From<(I2, I2, T)> for WeightedEdge<T, I>
 }
 
 
-impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2)> for WeightedEdge<T, I>
+impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2)> for Edge<T, I>
     where T: Default, I: From<I2> {
     fn from(u: &'a (I2, I2)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), Default::default())
     }
 }
-impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2, T)> for WeightedEdge<T, I>
+impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2, T)> for Edge<T, I>
     where T: Clone, I: From<I2> {
     fn from(u: &'a (I2, I2, T)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), u.2.clone())
@@ -91,27 +91,27 @@ impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2, T)> for WeightedEdge<T, I>
 /// ```
 
 #[derive(Clone,Debug)]
-pub struct WeightedNode<T: Data, I: Id> {
+pub struct Node<T: Data, I: Id> {
     incoming_edges: SmallVec<[I; 8]>,
     outgoing_edges: SmallVec<[I; 8]>,
     data: T
 }
 
-impl<T: Data, I: Id> WeightedNode<T, I> {
+impl<T: Data, I: Id> Node<T, I> {
     /// Instantiate a new node with the given data.
     pub fn new(data: T) -> Self {
-        WeightedNode{incoming_edges: SmallVec::new(), outgoing_edges: SmallVec::new(), data: data}
+        Node{incoming_edges: SmallVec::new(), outgoing_edges: SmallVec::new(), data: data}
     }
 }
 
-impl<T: Data, I: Id> std::ops::Deref for WeightedNode<T, I> {
+impl<T: Data, I: Id> std::ops::Deref for Node<T, I> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<T, I> Node<I> for WeightedNode<T, I>
+impl<T, I> interface::Node<I> for Node<T, I>
         where T: Data, I: Id {
     impl_basic_node!(I);
 }
@@ -123,22 +123,22 @@ impl<T, I> Node<I> for WeightedNode<T, I>
 
 /// Directed graph with user-defined node and edge weights.
 #[derive(Clone,Debug)]
-pub struct WeightedGraph<N: Data, E: Data, Ix: IndexType = DefaultIndexType> {
-    nodes: Vec<WeightedNode<N, EdgeIndex<Ix>>>,
-    edges: Vec<WeightedEdge<E, NodeIndex<Ix>>>
+pub struct Graph<N: Data, E: Data, Ix: IndexType = DefaultIndexType> {
+    nodes: Vec<Node<N, EdgeIndex<Ix>>>,
+    edges: Vec<Edge<E, NodeIndex<Ix>>>
 }
 
-impl<N, E, Ix> Graph for WeightedGraph<N, E, Ix>
+impl<N, E, Ix> interface::Graph for Graph<N, E, Ix>
     where N: Data, E: Data, Ix: IndexType {
     type NodeId = NodeIndex<Ix>;
     type EdgeId = EdgeIndex<Ix>;
-    type Node = WeightedNode<N, Self::EdgeId>;
-    type Edge = WeightedEdge<E, Self::NodeId>;
+    type Node = Node<N, Self::EdgeId>;
+    type Edge = Edge<E, Self::NodeId>;
     type EdgeIdIterator = Indices<Self::EdgeId>;
     type NodeIdIterator = Indices<Self::NodeId>;
 
     fn new() -> Self {
-        WeightedGraph{nodes: Vec::new(), edges: Vec::new()}
+        Graph{nodes: Vec::new(), edges: Vec::new()}
     }
 
     fn add_node(&mut self, n: Self::Node) -> Self::NodeId {
@@ -232,12 +232,12 @@ impl<N, E, Ix> Graph for WeightedGraph<N, E, Ix>
 }
 
 
-impl<N: Data, E: Data, Ix: IndexType> WeightedGraph<N, E, Ix> {
+impl<N: Data, E: Data, Ix: IndexType> Graph<N, E, Ix> {
     /// Add a node to the graph.
     ///
     /// @return Index of the newly-added node.
     pub fn add_node(&mut self, data: N) -> NodeIndex<Ix> {
-        <Self as Graph>::add_node(self, <Self as Graph>::Node::new(data))
+        <Self as interface::Graph>::add_node(self, <Self as interface::Graph>::Node::new(data))
     }
 
     /// Add an edge to the graph.
@@ -256,7 +256,7 @@ impl<N: Data, E: Data, Ix: IndexType> WeightedGraph<N, E, Ix> {
         panic_unless!(target.index() < self.nodes.len(), "Invalid target-node index provided to `Graph::add_edge`");
 
         // Add the edge itself
-        self.edges.push(<Self as Graph>::Edge::new(source, target, data));
+        self.edges.push(<Self as interface::Graph>::Edge::new(source, target, data));
 
         // ...and add cross-references to the nodes.
         let edge = EdgeIndex::new(self.edges.len() - 1);
@@ -271,14 +271,14 @@ impl<N: Data, E: Data, Ix: IndexType> WeightedGraph<N, E, Ix> {
 // Implement node-data lookup via indexing.
 macro_rules! graph_index_impl {
     ($tp: ty, $n: ident, $e: ident, $r: ident, $m: ident) => {
-        impl<$n: Data, $e: Data, Ix: IndexType> ops::Index<$tp> for WeightedGraph<N, E, Ix> {
+        impl<$n: Data, $e: Data, Ix: IndexType> ops::Index<$tp> for Graph<N, E, Ix> {
             type Output = $r;
             fn index(&self, ix: $tp) -> &$r {
                 &self.$m[ix.index()].data
             }
 
         }
-        impl<$n: Data, $e: Data, Ix: IndexType> ops::IndexMut<$tp> for WeightedGraph<N, E, Ix> {
+        impl<$n: Data, $e: Data, Ix: IndexType> ops::IndexMut<$tp> for Graph<N, E, Ix> {
             fn index_mut(&mut self, ix: $tp) -> &mut $r {
                 &mut self.$m[ix.index()].data
             }
