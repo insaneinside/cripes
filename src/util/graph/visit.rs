@@ -1,13 +1,13 @@
 //! Visitation patterns for graphs.
 //!
-//!
-//! As a simple example, the following creates a tree with six nodes, with the
-//! root's left subtree containing four nodes and the right subtree only one.
+//! As a simple example, the following creates two subgraphs and verifies that
+//! iterators over each, using both depth- and breadth-first algorithms, visit
+//! each node in the expected order.
 //!
 //! ```rust
 //! use cripes::util::graph::*;
 //!
-//! let mut g = WeightedGraph::<(),(),u8>::new();
+//! let mut g = BasicGraph::<u8>::new();
 //!
 //! // Add some nodes to the graph so we can add edges between them.
 //! for _ in 0..14 {
@@ -27,6 +27,8 @@
 //! g.add_edges(&[(0, 1), (1, 3), (1, 4), (4, 5), (4, 6), (0, 2),
 //!               (7, 8), (8, 10), (8, 11), (7, 9), (9, 12), (9, 13)]);
 //!
+//! // Define a convenience function to determine the order in which nodes are
+//! // walked.
 //! fn walk_order<G, A>(g: &G, entry: <G as Graph>::NodeId) -> Vec<usize>
 //!     where G: Graph, A: visit::RootedAlgorithm<G> {
 //!     g.iter::<A>(entry).map(|id| id.index()).collect::<Vec<_>>()
@@ -61,7 +63,7 @@ use smallvec::SmallVec;
 
 use bit_vec::BitVec;
 
-use super::{Graph,Id};
+use super::interface::{Graph,Id};
 
 
 // ================================================================
@@ -144,6 +146,13 @@ pub struct Visitor<G: Graph, A: Algorithm<G>> where A: Sized {
 pub trait Visit<G: Graph> {
     /// Determine the next node to inspect.
     fn next(&mut self, g: &G) -> Option<<G as Graph>::NodeId>;
+
+    /*/// Fetch a const reference to the visitor's state data.
+    fn state(&self) -> &VisitorState<G>;
+
+    /// Fetch a mutable reference to the visitor's state data.
+    fn state_mut(&mut self) -> &mut VisitorState<G>;*/
+
     /// Transform the visitor into an iterator.
     fn into_iter<'a>(self, g: &'a G) -> VisitorIter<'a, G, Self>
         where Self: Sized {
@@ -180,22 +189,24 @@ const DEPTH_FIRST_INITIAL_STACK_CAPACITY: usize = 8;
 const BREADTH_FIRST_INITIAL_QUEUE_CAPACITY: usize = 8;
 
 /// Depth-first traversal algorithm.
+///
+/// Memory: allocates on the heap.
 #[derive(Debug)]
 pub struct DepthFirst<G: Graph> {
     stack: SmallVec<[<G as Graph>::NodeId; DEPTH_FIRST_INITIAL_STACK_CAPACITY]>
 }
 
 impl<G: Graph + Debug> RootedAlgorithm<G> for DepthFirst<G> {
+    /// Create a depth-first search object starting at the specified node.
     fn new(_: &G, entry: <G as Graph>::NodeId) -> Self {
-        let mut stack = SmallVec::new();
-        stack.push(entry);
+        let mut stack = SmallVec::new(); stack.push(entry);
         DepthFirst{stack: stack}
     }
 }
 
 
 impl<G: Graph + Debug> Algorithm<G> for DepthFirst<G> {
-    fn next(&mut self, v: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
+    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
         if let Some(next) = self.stack.pop() {
             self.stack.extend(g.direct_successors(next).rev());
             Some(next)
@@ -207,12 +218,16 @@ impl<G: Graph + Debug> Algorithm<G> for DepthFirst<G> {
 
 
 /// Breadth-first traversal algorithm.
+///
+/// Memory:   allocates on the heap.
+
 #[derive(Debug)]
 pub struct BreadthFirst<G: Graph> {
     queue: VecDeque<<G as Graph>::NodeId>
 }
 
 impl<G: Graph + Debug> RootedAlgorithm<G> for BreadthFirst<G> {
+    /// Create a breadth-first search object starting at the specified node.
     fn new(_: &G, entry: <G as Graph>::NodeId) -> Self {
         let mut queue = VecDeque::with_capacity(BREADTH_FIRST_INITIAL_QUEUE_CAPACITY);
         queue.push_back(entry);
@@ -221,7 +236,7 @@ impl<G: Graph + Debug> RootedAlgorithm<G> for BreadthFirst<G> {
 }
 
 impl<G: Graph + Debug> Algorithm<G> for BreadthFirst<G> {
-    fn next(&mut self, v: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
+    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
         if let Some(next) = self.queue.pop_front() {
             self.queue.extend(g.direct_successors(next));
             Some(next)
