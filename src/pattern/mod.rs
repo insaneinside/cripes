@@ -195,15 +195,13 @@ pub enum Transition<T: Atom> {
 
 
 impl<'a,T: Atom> dot::GraphWalk<'a,NodeId,EdgeId> for Pattern<T> {
-    fn nodes(&self) -> dot::Nodes<'a,NodeId> { self.graph.node_indices().collect() }
-    fn edges(&self) -> dot::Edges<'a,EdgeId> { self.graph.edge_indices().collect() }
+    fn nodes(&self) -> dot::Nodes<'a,NodeId> { self.graph.node_ids().collect() }
+    fn edges(&self) -> dot::Edges<'a,EdgeId> { self.graph.edge_ids().collect() }
     fn source(&self, e: &EdgeId) -> NodeId {
-        if let Some((id, _)) = self.graph.edge_endpoints(*e) { id }
-        else { panic!("Invalid edge ID passed to `source`") }
+        self.graph.edge_source(*e)
     }
     fn target(&self, e: &EdgeId) -> NodeId {
-        if let Some((_, id)) = self.graph.edge_endpoints(*e) { id }
-        else { panic!("Invalid edge ID passed to `source`") }
+        self.graph.edge_target(*e)
     }
 }
 
