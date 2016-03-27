@@ -17,19 +17,25 @@ pub trait Id: Copy + Debug {
 }
 
 /// Any directed edge type used by a graph.
-pub trait Edge<NodeId: Id>: Debug {
+pub trait Edge: Debug {
+    /// Type used to identify source and destination nodes.
+    type NodeId: Id;
+
     /// Get index of the edge's source node.
-    fn source(&self) -> NodeId;
+    fn source(&self) -> Self::NodeId;
 
     /// Get index of the edge's target node.
-    fn target(&self) -> NodeId;
+    fn target(&self) -> Self::NodeId;
 }
 
 /// Any node type used by a graph.
-pub trait Node<EdgeId: Id>: Debug {
+pub trait Node: Debug {
+    /// Type used to identify incoming and outgoing edges.
+    type EdgeId: Id;
+
     /// Get an iterator over all (incoming + outgoing) edges connected to
     /// the node.
-    fn edges(&self) -> Chain<std::slice::Iter<EdgeId>, std::slice::Iter<EdgeId>> {
+    fn edges(&self) -> Chain<std::slice::Iter<Self::EdgeId>, std::slice::Iter<Self::EdgeId>> {
         self.incoming_edges().into_iter().chain(self.outgoing_edges().into_iter())
     }
 
@@ -38,7 +44,7 @@ pub trait Node<EdgeId: Id>: Debug {
     /// Note that if an edge has the node's index as both its source _and_ its
     /// target, it should appear in the set of values returned by this iterator
     /// **and** that returned by the iterator obtained from `outgoing_edges`.
-    fn incoming_edges(&self) -> std::slice::Iter<EdgeId>;
+    fn incoming_edges(&self) -> std::slice::Iter<Self::EdgeId>;
 
     /// Get the number of incoming edges.
     fn incoming_edge_count(&self) -> usize;
@@ -48,16 +54,16 @@ pub trait Node<EdgeId: Id>: Debug {
     /// Note that if an edge has the node's index as both its source _and_ its
     /// target, it should appear in the set of values returned by this iterator
     /// **and** that returned by the iterator obtained from `incoming_edges`.
-    fn outgoing_edges(&self) -> std::slice::Iter<EdgeId>;
+    fn outgoing_edges(&self) -> std::slice::Iter<Self::EdgeId>;
 
     /// Get the number of outgoing edges.
     fn outgoing_edge_count(&self) -> usize;
 
     /// Record the existence of an edge that terminates at this node.
-    fn add_incoming_edge(&mut self, e: EdgeId);
+    fn add_incoming_edge(&mut self, e: Self::EdgeId);
 
     /// Record the existence of an edge that originates from this node.
-    fn add_outgoing_edge(&mut self, e: EdgeId);
+    fn add_outgoing_edge(&mut self, e: Self::EdgeId);
 }
 
 
@@ -71,10 +77,10 @@ pub trait Graph {
     type EdgeId: Id;
 
     /// Concrete node type used by a graph.
-    type Node: Node<Self::EdgeId>;
+    type Node: Node<EdgeId=Self::EdgeId>;
 
     /// Concrete edge type used by a graph.
-    type Edge: Edge<Self::NodeId>;
+    type Edge: Edge<NodeId=Self::NodeId>;
 
     /// Iterator returned from `node_ids`.
     type NodeIdIterator: Iterator<Item=Self::NodeId>;

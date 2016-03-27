@@ -31,7 +31,7 @@ impl<I: Id> Default for Node<I> {
     }
 }
 
-impl<I: Id> interface::Node<I> for Node<I> {
+impl<I: Id> interface::Node for Node<I> {
     impl_basic_node!(I);
 }
 
@@ -45,8 +45,8 @@ pub struct Edge<I: Id> {
     target: I
 }
 
-impl<I> interface::Edge<I> for Edge<I> where I: Id {
-    impl_basic_edge!();
+impl<I> interface::Edge for Edge<I> where I: Id {
+    impl_basic_edge!(I);
 }
 
 impl<I: Id> Edge<I> {

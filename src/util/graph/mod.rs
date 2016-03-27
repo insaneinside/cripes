@@ -23,7 +23,8 @@ pub use self::interface::{Id,Edge,Node,Graph};
 
 /// Produce `impl` items on some trait for several structurally-identical types.
 macro_rules! impl_basic_edge {
-    () => {
+    ($I: ident) => {
+        type NodeId = $I;
         #[inline(always)]
         fn source(&self) -> I { self.source }
         #[inline(always)]
@@ -34,6 +35,7 @@ macro_rules! impl_basic_edge {
 
 macro_rules! impl_basic_node {
     ($I: ident) => {
+        type EdgeId = $I;
         #[inline(always)]
         fn incoming_edges(&self) -> std::slice::Iter<$I> {
             self.incoming_edges.iter()

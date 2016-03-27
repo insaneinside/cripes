@@ -25,9 +25,9 @@ pub struct Edge<T: Data, I: Id> {
     data: T
 }
 
-impl<T, I> interface::Edge<I> for Edge<T, I>
+impl<T, I> interface::Edge for Edge<T, I>
     where T: Data, I: Id {
-    impl_basic_edge!();
+    impl_basic_edge!(I);
 }
 
 impl<T: Data, I: Id> Edge<T, I> {
@@ -111,7 +111,7 @@ impl<T: Data, I: Id> std::ops::Deref for Node<T, I> {
     }
 }
 
-impl<T, I> interface::Node<I> for Node<T, I>
+impl<T, I> interface::Node for Node<T, I>
         where T: Data, I: Id {
     impl_basic_node!(I);
 }
