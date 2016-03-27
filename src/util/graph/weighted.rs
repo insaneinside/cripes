@@ -163,21 +163,6 @@ impl<N, E, Ix> interface::Graph for Graph<N, E, Ix>
     }
 
     #[inline]
-    fn incoming_edges(&self, n: Self::NodeId) -> std::slice::Iter<Self::EdgeId> { 
-        self.nodes[n.index()].incoming_edges()
-    }
-
-    #[inline]
-    fn outgoing_edges(&self, n: Self::NodeId) -> std::slice::Iter<Self::EdgeId> {
-        self.nodes[n.index()].outgoing_edges()
-    }
-
-    #[inline]
-    fn direct_successors(&self, n: Self::NodeId) -> Successors<Self> {
-        Successors::new(self, self.outgoing_edges(n))
-    }
-
-    #[inline]
     fn node_ids(&self) -> Self::NodeIdIterator {
         Indices::new(0..self.nodes.len())
     }
@@ -207,19 +192,6 @@ impl<N, E, Ix> interface::Graph for Graph<N, E, Ix>
 
     fn contains_edge(&self, e: Self::EdgeId) -> bool {
         e.index() < self.edges.len()
-    }
-
-    fn edge_source(&self, e: EdgeIndex<Ix>) -> Self::NodeId {
-        self.edges[e.index()].source()
-    }
-
-    fn edge_target(&self, e: EdgeIndex<Ix>) -> Self::NodeId {
-        self.edges[e.index()].target()
-    }
-
-    fn edge_endpoints(&self, e: EdgeIndex<Ix>) -> (Self::NodeId, Self::NodeId) {
-        let ref edge = self.edges[e.index()];
-        (edge.source(), edge.target())
     }
 
     fn edge_ids(&self) -> Self::EdgeIdIterator {
