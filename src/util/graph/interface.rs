@@ -97,7 +97,7 @@ pub trait Graph {
 
     /// Add an explicitly-specified node to the graph, returning its unique
     /// identifier.
-    fn add_node(&mut self, n: Self::Node) -> Self::NodeId;
+    fn add_node<T: Into<Self::Node>>(&mut self, n: T) -> Self::NodeId;
 
     /// Fetch a reference to a node.
     ///
@@ -124,7 +124,7 @@ pub trait Graph {
 
     /// Add an explicitly-specified edge to the graph, returning its
     /// unique identifier.
-    fn add_edge(&mut self, e: Self::Edge) -> Self::EdgeId;
+    fn add_edge<T: Into<Self::Edge>>(&mut self, e: T) -> Self::EdgeId;
 
     /// Fetch a reference to an edge.
     ///

@@ -35,6 +35,13 @@ impl<I: Id> interface::Node for Node<I> {
     impl_basic_node!(I);
 }
 
+impl<I: Id> From<()> for Node<I> {
+    #[inline(always)]
+    fn from(_: ()) -> Self {
+        Node::new()
+    }
+}
+
 // ----------------------------------------------------------------
 // Edge
 
@@ -51,6 +58,7 @@ impl<I> interface::Edge for Edge<I> where I: Id {
 
 impl<I: Id> Edge<I> {
     /// Create an edge with the given source & target node IDs.
+    #[inline]
     pub fn new(source: I, target: I) -> Self {
         Edge{source: source, target: target}
     }
