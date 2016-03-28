@@ -1,5 +1,8 @@
-//! Directed graph types.  While these types are indeed generic with respect to
-//! application, they're tailored for graph-based pattern analysis.
+//! Interfaces and implementations for directed graphs.
+//!
+//! This module provides a set of interfaces and implementations of software
+//! components for graph representations.  Ergonomics and composability are the
+//! main goals here.
 //!
 //! We would like a graph representation that gives us both fast traversal and
 //! fast analysis, and whose API allows for efficient *and* ergonomic use.
@@ -17,9 +20,18 @@ pub mod iter;
 pub mod interface;
 pub mod visit;
 
-pub use self::common::{EdgeIndex,NodeIndex};
-pub use self::weighted::{Graph as WeightedGraph, Edge as WeightedEdge, Node as WeightedNode};
+pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
+pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
 pub use self::interface::{Id,Edge,Node,Graph};
+
+/// Simple data-bearing directed graph.  `N` determines the type of data
+/// attached to nodes, `E` the type attached to edges, and `Ix` the integer
+/// type used to identify nodes and edges.
+pub type WeightedGraph<N, E, Ix = common::DefaultIndexType> = AdjacencyList<WeightedNode<N, EdgeIndex<Ix>>, WeightedEdge<E, NodeIndex<Ix>>>;
+
+/// Unweighted directed graph.  `Ix` determines the integer type used to
+/// identify nodes and edges.
+pub type BasicGraph<Ix = common::DefaultIndexType> = AdjacencyList<basic::Node<EdgeIndex<Ix>>, basic::Edge<NodeIndex<Ix>>>;
 
 /// Produce `impl` items on some trait for several structurally-identical types.
 macro_rules! impl_basic_edge {
