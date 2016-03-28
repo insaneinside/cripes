@@ -33,7 +33,8 @@ pub type WeightedGraph<N, E, Ix = common::DefaultIndexType> = AdjacencyList<Weig
 /// identify nodes and edges.
 pub type BasicGraph<Ix = common::DefaultIndexType> = AdjacencyList<basic::Node<EdgeIndex<Ix>>, basic::Edge<NodeIndex<Ix>>>;
 
-/// Produce `impl` items on some trait for several structurally-identical types.
+/// Implement `interface::Edge` for a type with members
+/// `source: $I` and `target: $I`.
 macro_rules! impl_basic_edge {
     ($I: ident) => {
         type NodeId = $I;
@@ -45,6 +46,8 @@ macro_rules! impl_basic_edge {
 }
 
 
+/// Implement `interface::Node` for a type with members `incoming_edges` and
+/// `outgoing_edges` of types compatible with `Vec<$I>`.
 macro_rules! impl_basic_node {
     ($I: ident) => {
         type EdgeId = $I;
