@@ -1,7 +1,7 @@
 //! "Weighted" graph types
 
 use std;
-use std::ops;
+use std::ops::{Deref,DerefMut};
 use std::fmt::Debug;
 
 use smallvec::SmallVec;
@@ -37,11 +37,17 @@ impl<T: Data, I: Id> Edge<T, I> {
         Edge{source: source, target: target, data: data}
     }
 }
-///
-impl<T: Data, I: Id> std::ops::Deref for Edge<T, I> {
+
+impl<T: Data, I: Id> Deref for Edge<T, I> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.data
+    }
+}
+
+impl<T: Data, I: Id> DerefMut for Edge<T, I> {
+    fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
+        &mut self.data
     }
 }
 
@@ -104,10 +110,16 @@ impl<T: Data, I: Id> Node<T, I> {
     }
 }
 
-impl<T: Data, I: Id> std::ops::Deref for Node<T, I> {
+impl<T: Data, I: Id> Deref for Node<T, I> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.data
+    }
+}
+
+impl<T: Data, I: Id> DerefMut for Node<T, I> {
+    fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
+        &mut self.data
     }
 }
 
