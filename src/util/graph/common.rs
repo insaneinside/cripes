@@ -2,6 +2,7 @@
 
 use std::ops;
 use std::fmt::Debug;
+use std::default::Default;
 use std::hash::{Hash,Hasher};
 
 use num::{NumCast,ToPrimitive};
@@ -60,12 +61,26 @@ impl_index_wrapper_type!(NodeIndex<T>,NodeIndex,T);
 
 /// Adjacency-list graph implementation.
 #[derive(Clone,Debug)]
-pub struct AdjacencyList<N, E>
-    where N: interface::Node,
-          E: interface::Edge {
+pub struct AdjacencyList<N, E> {
     nodes: Vec<N>,
     edges: Vec<E>
 }
+
+
+impl<N, E> AdjacencyList<N, E> {
+    /// Create an empty AdjacencyList instance.
+    pub fn new() -> Self {
+        AdjacencyList{nodes: Vec::new(), edges: Vec::new()}
+    }
+}
+
+impl<N, E> Default for AdjacencyList<N, E> {
+    #[inline(always)]
+    fn default() -> Self {
+        AdjacencyList::new()
+   }
+}
+
 
 impl<N, E> interface::Graph for AdjacencyList<N, E>
     where N: interface::Node,
@@ -76,10 +91,6 @@ impl<N, E> interface::Graph for AdjacencyList<N, E>
     type Edge = E;
     type EdgeIdIterator = Indices<Self::EdgeId>;
     type NodeIdIterator = Indices<Self::NodeId>;
-
-    fn new() -> Self {
-        AdjacencyList{nodes: Vec::new(), edges: Vec::new()}
-    }
 
     fn add_node<T: Into<Self::Node>>(&mut self, n: T) -> Self::NodeId {
         self.nodes.push(n.into());

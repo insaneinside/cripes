@@ -91,7 +91,10 @@ pub trait Graph {
     // --------------------------------
 
     /// Create a new, empty instance of this graph type.
-    fn new() -> Self where Self: Sized;
+    fn new() -> Self
+        where Self: Sized + Default {
+        Default::default()
+    }
 
     // --------------------------------
 
