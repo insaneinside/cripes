@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::default::Default;
 use std::hash::{Hash,Hasher};
 
-use num::{NumCast,ToPrimitive};
+use num_traits::{NumCast,ToPrimitive};
 
 use super::interface::{self,Id};
 use super::iter::Indices;

@@ -11,7 +11,7 @@
 
 
 extern crate dot;
-extern crate num;
+extern crate num_traits;
 extern crate anymap;
 extern crate bit_vec;
 extern crate smallvec;
