@@ -194,7 +194,7 @@ pub enum Transition<T: Atom> {
 }
 
 
-impl<'a,T: Atom> dot::GraphWalk<'a,NodeId,EdgeId> for Pattern<T> {
+impl<'a,T: Atom> dot::GraphWalk<'a,NodeId,EdgeId> for Graph<T> {
     fn nodes(&self) -> dot::Nodes<'a,NodeId> { self.graph.node_ids().collect() }
     fn edges(&self) -> dot::Edges<'a,EdgeId> { self.graph.edge_ids().collect() }
     fn source(&self, e: &EdgeId) -> NodeId {
@@ -213,7 +213,7 @@ impl<'a,T: Atom> dot::GraphWalk<'a,NodeId,EdgeId> for Pattern<T> {
 //         dot::LabelText::LabelStr(format!("{:?}", edge).into())
 //     }
 // }
-impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
+impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Graph<char> {
     fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new(format!("G{}", self.entry.index())).unwrap() }
     fn node_id(&'a self, n: &NodeId) -> dot::Id<'a> { dot::Id::new(format!("N{}", n.index())).unwrap() }
     fn edge_label(&'a self, e: &EdgeId) -> dot::LabelText<'a> {
@@ -234,13 +234,13 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Pattern<char> {
 // Patterns
 
 /// Graph type used for patterns.
-pub type Graph<T> = graph::WeightedGraph<Point,Edge<T>>;
+pub type GraphImpl<T> = graph::WeightedGraph<Point,Edge<T>>;
 
 /// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
-pub struct Pattern<T: Atom> {
+pub struct Graph<T: Atom> {
     /// Graph representation of the control-flow of the pattern's automaton.
-    pub graph: Graph<T>,
+    pub graph: GraphImpl<T>,
 
     /// Index of the node that serves as the main entry point for the graph.
     pub entry: NodeId,
@@ -252,11 +252,10 @@ pub struct Pattern<T: Atom> {
     edge_analyses: HashMap<(TypeId,EdgeId),Box<CloneAny>>
 }
 
-impl From<Expr> for Pattern<char> {
-    fn from(e: Expr) -> Self { Pattern::build(e) }
+impl From<Expr> for Graph<char> {
+    fn from(e: Expr) -> Self { Self::build(e) }
 }
 
-impl Pattern<char> {
     /** Create a subgraph describing the given expression, and return its
      * entry and exit node IDs.
      *
