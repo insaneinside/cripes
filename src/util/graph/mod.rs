@@ -1,8 +1,13 @@
 //! Interfaces and implementations for directed graphs.
 //!
 //! This module provides a set of interfaces and implementations of software
-//! components for graph representations.  Ergonomics and composability are the
-//! main goals here.
+//! components for graph representations.
+//!
+//! These types are designed to maximize composability and ergonomics;
+//! currently we have a single graph implementation
+//! ([AdjacencyList](struct.AdjacencyList.html), which uses the adjacency-list
+//! pattern and integer-based IDs) and two sets of edge/node implementations
+//! ([basic](basic/) and [weighted](weighted/)).
 //!
 //! We would like a graph representation that gives us both fast traversal and
 //! fast analysis, and whose API allows for efficient *and* ergonomic use.
