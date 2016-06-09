@@ -23,11 +23,13 @@
 mod common;
 pub mod iter;
 pub mod interface;
+pub mod transform;
 pub mod visit;
 
 pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
 pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
 pub use self::interface::{Id,Edge,Node,Graph};
+pub use self::transform::{Builder,Rewriter};
 
 /// Simple data-bearing directed graph.  `N` determines the type of data
 /// attached to nodes, `E` the type attached to edges, and `Ix` the integer
