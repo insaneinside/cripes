@@ -20,6 +20,9 @@ use regex_syntax::{Expr,Repeater};
 
 use util::graph::{self,Graph as Graphlike,Id as GraphID};
 
+pub mod analysis;
+use self::analysis::{FlowStructure,NodeAnalysis};
+
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
 impl<T> Atom for T where T: Debug + Copy + Clone + PartialOrd<T> {}
@@ -221,7 +224,10 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Graph<char> {
         dot::LabelText::LabelStr(format!("{}", edge).into())
     }
     fn node_label(&'a self, n: &NodeId) -> dot::LabelText<'a> {
-        dot::LabelText::LabelStr(format!("{}", n.index()).into())
+        dot::LabelText::LabelStr(format!("{} ({:?})",
+                                         n.index(),
+                                         <FlowStructure as NodeAnalysis<GraphImpl<char>>>::apply(&self.graph, *n))
+                                 .into())
     }
     fn node_shape(&'a self, node: &NodeId) -> Option<dot::LabelText<'a>> {
         let shape: &'static str =
