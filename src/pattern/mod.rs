@@ -18,7 +18,7 @@ use anymap::any::CloneAny;
 use regex_syntax;
 use regex_syntax::{Expr,Repeater};
 
-use util::graph::{self,Graph as Graphlike,Id as GraphID};
+use util::graph::{self,Builder,Graph as Graphlike,Id as GraphID};
 
 pub mod analysis;
 use self::analysis::{FlowStructure,NodeAnalysis};
@@ -34,7 +34,6 @@ type GraphIndex = u32;
 pub type NodeId = graph::NodeIndex<u32>;
 /// Wrapped edge index.
 pub type EdgeId = graph::EdgeIndex<u32>;
-
 
 // ================================================================
 // Nodes
@@ -242,6 +241,7 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Graph<char> {
 /// Graph type used for patterns.
 pub type GraphImpl<T> = graph::WeightedGraph<Point,Edge<T>>;
 
+
 /// Graph-based representation of automata patterns.
 #[derive(Debug,Clone)]
 pub struct Graph<T: Atom> {
@@ -262,30 +262,20 @@ impl From<Expr> for Graph<char> {
     fn from(e: Expr) -> Self { Self::build(e) }
 }
 
-    /** Create a subgraph describing the given expression, and return its
-     * entry and exit node IDs.
-     *
-     * @return Tuple containing the stand-alone graph's entry- and
-     * exit-node IDs. */
-    fn subgraph(g: &mut Graph<char>, expr: Expr) -> (NodeId, NodeId) {
-        let entry = g.add_node(Point::new());
-        Pattern::build_recursive(g, entry, None, expr)
+impl<T: Atom> Graph<T> {
+    pub fn rewrite<F>(&mut self, f: F)
+        where F: Fn(&mut graph::Rewriter<GraphImpl<T>>) {
+        self.graph = {
+            let mut r = graph::Rewriter::new(&self.graph);
+            f(&mut r);
+            r.finish() };
     }
-
-    /** Append an edge to a graph after a given node, and (optionally) before
-     * a given node.  If the passed `_next` value is `None`, a node will
-     * be added.
-     *
-     * @return ID of the target node for the new edge.
-     */
-    fn append_edge(g: &mut Graph<char>, prev: NodeId, _next: Option<NodeId>, e: Edge<char>) -> (NodeId, NodeId) {
-        let next = _next.unwrap_or_else(|| g.add_node(Point::new()));
-        g.add_edge(prev, next, e);
-        (prev, next)
-    }
+}
 
 
-    /// Convert a
+
+impl Graph<char> {
+    /// Convert a `regex_syntax` character class to a transition.
     fn convert_class(c: regex_syntax::CharClass) -> Transition<char> {
         // The `unwrap()` below is okay because the way regex_syntax is
         // implemented, class ranges simply _cannot_ be empty.
@@ -296,6 +286,37 @@ impl From<Expr> for Graph<char> {
         } else {
             Transition::Atom(first.start)
         }
+    }
+
+    fn build(expr: Expr) -> Self {
+        let mut g = GraphImpl::new();
+        // Build the graph describing the given expression.
+        let (entry, exit) = Self::build_subgraph(&mut g, expr);
+        // Set the final node as an accepting state.
+        (*g[exit]).set_accept(true);
+
+
+        return Graph{graph: g, entry: entry,
+                     node_analyses: HashMap::new(), edge_analyses: HashMap::new()};
+    }
+
+    /// Attempt to parse a regular expression; if successful, return the
+    pub fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,regex_syntax::Error> {
+        match Expr::parse(s.as_ref()) {
+            Ok(expr) => Ok(Self::build(expr)),
+            Err(err) => Err(err)
+        }
+    }
+}
+
+impl Builder<GraphImpl<char>> for Graph<char> {
+    type Input = Expr;
+
+    fn entry_node(g: &mut GraphImpl<char>, _: &Expr) -> NodeId {
+        g.add_node(Point::new())
+    }
+    fn target_node<E>(g: &mut GraphImpl<char>, _: &E) -> NodeId {
+        g.add_node(Point::new())
     }
 
     /** Build the canonical NFA subgraph for an expression.
@@ -313,12 +334,14 @@ impl From<Expr> for Graph<char> {
      *
      * @return Indices of the entry and exit nodes for the appended subgraph.
      */
-    fn build_recursive(g: &mut Graph<char>, mut prev: NodeId, next: Option<NodeId>, expr: Expr) -> (NodeId, NodeId) {
+    fn build_recursive(g: &mut GraphImpl<char>, mut prev: NodeId, next: Option<NodeId>, expr: Expr) -> (NodeId, NodeId) {
         let new_next = match expr {
-            Expr::Literal{chars, casei} =>
+            Expr::Literal{chars, casei} => {
                 // FIXME: for case-insensitive matches, we should add some sort
                 // of normalization preprocessing action to the node.
-                Self::append_edge(g, prev, next, Edge::new(if chars.len() > 1 { Transition::Sequence(chars) } else { Transition::Atom(chars[0])})).1,
+                if casei { panic!("Case-insensitive matching is not yet supported") }
+                Self::append_edge(g, prev, next, Edge::new(if chars.len() > 1 { Transition::Sequence(chars) } else { Transition::Atom(chars[0])})).1
+            },
             Expr::AnyChar => Self::append_edge(g, prev, next, Edge::new(Transition::Wildcard)).1,
             Expr::AnyCharNoNL => Self::append_edge(g, prev, next, Edge::new_inverted(Transition::Atom('\n'))).1,
             Expr::Class(c) => {
@@ -333,9 +356,10 @@ impl From<Expr> for Graph<char> {
             Expr::StartText => Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::StartOfInput))).1,
             Expr::EndText => Self::append_edge(g, prev, next, Edge::new(Transition::Anchor(Anchor::EndOfInput))).1,
 
-            Expr::Group{e, ..} => return Pattern::build_recursive(g, prev, next, *e),
+            Expr::Group{e, ..} => return Self::build_recursive(g, prev, next, *e),
 
             Expr::Repeat{e, r, greedy} => {
+                if ! greedy { panic!("Non-greedy repetition is not yet supported"); }
                 let (min, mut max) = match r {
                     Repeater::ZeroOrOne => (0, Some(1)),
                     Repeater::ZeroOrMore => (0, None),
@@ -361,11 +385,11 @@ impl From<Expr> for Graph<char> {
                            be followed.]
                    */
                 if min == 0 {
-                    Pattern::build_recursive(g, prev, Some(prev), *e);
+                    Self::build_recursive(g, prev, Some(prev), *e);
                     prev
                 } else {
                     // Inline the first occurrence of the subgraph.
-                    let (_, subgraph_exit) = Pattern::build_recursive(g, prev, next, *e);
+                    let (_, subgraph_exit) = Self::build_recursive(g, prev, next, *e);
 
                     /* FIXME: decide how to implement required repetitions.
                        Directly inlining more than one copy of the subgraph
@@ -391,37 +415,21 @@ impl From<Expr> for Graph<char> {
             Expr::Alternate(exprs) => {
                 let _next = next.unwrap_or_else(|| g.add_node(Point::new()) );
                 for expr in exprs {
-                    Pattern::build_recursive(g, prev, Some(_next), expr);
+                    Self::build_recursive(g, prev, Some(_next), expr);
                 }
                 _next
             },
 
-            // Why would we have an empty expression?
-            Expr::Empty => unreachable!(),
+            // An empty expression is simply an espilon transition to the
+            // current node.  If a `next` node is provided, we'll use
+            // that instead.
+            Expr::Empty => next.unwrap_or_else(|| prev),
 
             // FIXME: should we implement word boundaries?
             Expr::WordBoundary => unreachable!(), /*Self::append_edge(g, prev, next, Transition::Anchor(Anchor::And(*/
             Expr::NotWordBoundary => unreachable!(),
+            _ => unimplemented!()
         };
         (prev, new_next)
-    }
-    fn build(expr: Expr) -> Pattern<char> {
-        let mut g = Graph::new();
-        // Build the graph describing the given expression.
-        let (entry, exit) = Pattern::subgraph(&mut g, expr);
-        // Set the final node as an accepting state.
-        g[exit].set_accept(true);
-
-
-        return Pattern{graph: g, entry: entry,
-                       node_analyses: HashMap::new(), edge_analyses: HashMap::new()};
-    }
-
-    /// Attempt to parse a regular expression; if successful, return the
-    pub fn parse_string<S: AsRef<str>>(s: S) -> Result<Self,regex_syntax::Error> {
-        match Expr::parse(s.as_ref()) {
-            Ok(expr) => Ok(Pattern::build(expr)),
-            Err(err) => Err(err)
-        }
     }
 }
