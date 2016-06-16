@@ -6,7 +6,7 @@ use std::fmt::Debug;
 
 use smallvec::SmallVec;
 
-use super::interface::{self, Id, Graph, Node as INode, Edge as IEdge};
+use super::interface::{self, Id};
 use super::common::{IndexType,NodeIndex,EdgeIndex};
 
 /// Trait bounds for types used as edge and node data payloads.
