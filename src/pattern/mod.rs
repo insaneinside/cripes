@@ -9,7 +9,7 @@
 
 use std::any::TypeId;
 use std::collections::HashMap;
-use std::iter::FromIterator;
+use std::iter::{FromIterator,IntoIterator};
 use std::result::Result;
 use std::fmt::{self,Display,Debug};
 
