@@ -27,9 +27,6 @@ use self::analysis::{FlowStructure,NodeAnalysis};
 pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
 impl<T> Atom for T where T: Debug + Copy + Clone + PartialOrd<T> {}
 
-/// Primitive type used for node and edge indices in pattern graphs.
-type GraphIndex = u32;
-
 /// Wrapped node index.
 pub type NodeId = graph::NodeIndex<u32>;
 /// Wrapped edge index.
