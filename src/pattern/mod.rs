@@ -216,8 +216,14 @@ impl<'a> dot::Labeller<'a,NodeId,EdgeId> for Graph<char> {
     fn graph_id(&'a self) -> dot::Id<'a> { dot::Id::new(format!("G{}", self.entry.index())).unwrap() }
     fn node_id(&'a self, n: &NodeId) -> dot::Id<'a> { dot::Id::new(format!("N{}", n.index())).unwrap() }
     fn edge_label(&'a self, e: &EdgeId) -> dot::LabelText<'a> {
-        let edge = &self.graph[*e];
+        let edge = &*self.graph[*e];
         dot::LabelText::LabelStr(format!("{}", edge).into())
+    }
+    fn edge_style(&'a self, e: &EdgeId) -> dot::Style {
+        match self.graph.edge(*e).input {
+            Transition::Repeat{..} => dot::Style::Dashed,
+            _ => dot::Style::Solid
+        }
     }
     fn node_label(&'a self, n: &NodeId) -> dot::LabelText<'a> {
         dot::LabelText::LabelStr(format!("{} ({:?})",
