@@ -8,7 +8,7 @@ use super::visit::{self,Visit};
 use super::iter::Successors;
 
 /// Interface provided by node and edge identifiers.
-pub trait Id: Copy + Debug {
+pub trait Id: Copy + Debug + PartialEq + PartialOrd {
     /// Create a new Id object with the given value.
     fn new(v: usize) -> Self;
 
