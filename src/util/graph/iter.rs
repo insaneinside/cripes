@@ -11,12 +11,14 @@ use super::interface::{Id,Graph};
 /// Iterator over the (node or edge) indices of a graph.
 #[derive(Clone)]
 pub struct Indices<T: Id>(ops::Range<usize>, PhantomData<T>);
+
 impl<T: Id> Indices<T> {
     /// Create an `Indices` iterator over the given range.
     pub fn new(r: ops::Range<usize>) -> Self {
         Indices(r, PhantomData)
     }
 }
+
 impl<T: Id> Iterator for Indices<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
@@ -35,6 +37,7 @@ pub struct Successors<'a, G: Graph>
     graph: &'a G,
     iter: slice::Iter<'a, <G as Graph>::EdgeId>
 }
+
 impl<'a,G: Graph> Successors<'a, G> {
     /// Create an iterator over the successors of a node using that node's
     /// outgoing edge list.
@@ -42,6 +45,7 @@ impl<'a,G: Graph> Successors<'a, G> {
         Successors{graph: g, iter: iter}
     }
 }
+
 impl<'a,G: 'a + Graph> Iterator for Successors<'a,G> {
     type Item = <G as Graph>::NodeId;
     fn next(&mut self) -> Option<Self::Item> {
