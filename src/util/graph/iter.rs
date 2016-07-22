@@ -5,7 +5,7 @@ use std::slice;
 use std::marker::PhantomData;
 use std::iter::{Iterator,DoubleEndedIterator};
 
-use super::interface::{Id,Graph};
+use super::interface::{Id, Graph, DirectedGraph};
 
 
 /// Iterator over the (node or edge) indices of a graph.
@@ -32,13 +32,19 @@ impl<T: Id> Iterator for Indices<T> {
 
 
 /// Iterator over some node's direct successors in a particular graph.
-pub struct Successors<'a, G: Graph>
-    where G: 'a, <G as Graph>::EdgeId: 'a {
+pub struct Successors<'a, G>
+    where G: 'a + DirectedGraph,
+          G::EdgeId: 'a
+{
     graph: &'a G,
-    iter: slice::Iter<'a, <G as Graph>::EdgeId>
+    //iter: G::Node::EdgeIdIterator;
+    iter: slice::Iter<'a, G::EdgeId>
 }
 
-impl<'a,G: Graph> Successors<'a, G> {
+impl<'a,G> Successors<'a, G>
+    where G: 'a + DirectedGraph,
+          G::EdgeId: 'a
+{
     /// Create an iterator over the successors of a node using that node's
     /// outgoing edge list.
     pub fn new(g: &'a G, iter: slice::Iter<'a, <G as Graph>::EdgeId>) -> Self {
@@ -46,16 +52,19 @@ impl<'a,G: Graph> Successors<'a, G> {
     }
 }
 
-impl<'a,G: 'a + Graph> Iterator for Successors<'a,G> {
+impl<'a,G> Iterator for Successors<'a,G>
+    where G: 'a + DirectedGraph
+{
     type Item = <G as Graph>::NodeId;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|id| self.graph.edge_target(*id))
     }
 }
 
-impl<'a,G: 'a + Graph> DoubleEndedIterator for Successors<'a,G> {
+impl<'a,G> DoubleEndedIterator for Successors<'a,G>
+    where G: 'a + DirectedGraph
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         self.iter.next_back().map(|id| self.graph.edge_target(*id))
     }
 }
-

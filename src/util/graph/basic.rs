@@ -31,7 +31,15 @@ impl<I: Id> Default for Node<I> {
     }
 }
 
-impl<I: Id> interface::Node for Node<I> {
+impl<I> interface::Node for Node<I>
+    where I: Id {
+    type EdgeId = I;
+    fn edges(&self) -> std::iter::Chain<std::slice::Iter<Self::EdgeId>,std::slice::Iter<Self::EdgeId>> {
+        self.incoming_edges.iter().chain(self.outgoing_edges.iter())
+    }
+}
+
+impl<I: Id> interface::DirectedNode for Node<I> {
     impl_basic_node!(I);
 }
 
@@ -52,10 +60,6 @@ pub struct Edge<I: Id> {
     target: I
 }
 
-impl<I> interface::Edge for Edge<I> where I: Id {
-    impl_basic_edge!(I);
-}
-
 impl<I: Id> Edge<I> {
     /// Create an edge with the given source & target node IDs.
     #[inline]
@@ -63,6 +67,23 @@ impl<I: Id> Edge<I> {
         Edge{source: source, target: target}
     }
 }
+
+impl<I> interface::Edge for Edge<I> where I: Id {
+    type NodeId = I;
+    #[inline]
+    fn endpoints(&self) -> (Self::NodeId, Self::NodeId) {
+        (self.source, self.target)
+    }
+}
+
+impl<I> interface::DirectedEdge for Edge<I> where I: Id {
+    #[inline]
+    fn source(&self) -> I { self.source }
+
+    #[inline]
+    fn target(&self) -> I { self.target }
+}
+
 
 impl<I: Id, I2: Copy> From<(I2, I2)> for Edge<I>
     where I: From<I2> {

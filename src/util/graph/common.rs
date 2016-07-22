@@ -7,7 +7,7 @@ use std::hash::{Hash,Hasher};
 
 use num_traits::{NumCast,ToPrimitive};
 
-use super::interface::{self,Id};
+use super::interface::{self, Id, Graph};
 use super::iter::Indices;
 
 // ================================================================
@@ -84,24 +84,48 @@ impl<N, E> Default for AdjacencyList<N, E> {
 
 impl<N, E> interface::Graph for AdjacencyList<N, E>
     where N: interface::Node,
-          E: interface::Edge {
+          E: interface::Edge
+{
     type NodeId = <E as interface::Edge>::NodeId;
     type EdgeId = <N as interface::Node>::EdgeId;
-    type Node = N;
-    type Edge = E;
     type EdgeIdIterator = Indices<Self::EdgeId>;
     type NodeIdIterator = Indices<Self::NodeId>;
-
-    fn add_node<T: Into<Self::Node>>(&mut self, n: T) -> Self::NodeId {
-        self.nodes.push(n.into());
-        Self::NodeId::new(self.nodes.len() - 1)
-    }
 
     #[inline(always)]
     fn contains_node(&self, n: Self::NodeId) -> bool {
         n.index() < self.nodes.len()
     }
 
+    #[inline]
+    fn node_ids(&self) -> Self::NodeIdIterator {
+        Indices::new(0..self.nodes.len())
+    }
+
+    #[inline]
+    fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    fn contains_edge(&self, e: Self::EdgeId) -> bool {
+        e.index() < self.edges.len()
+    }
+
+    fn edge_ids(&self) -> Self::EdgeIdIterator {
+        Indices::new(0..self.edges.len())
+    }
+
+    fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
+}
+
+impl<N, E> interface::ConcreteGraph for AdjacencyList<N, E>
+    where N: interface::DirectedNode,
+          E: interface::DirectedEdge
+{
+    type Node = N;
+    type Edge = E;
 
     #[inline(always)]
     fn node(&self, n: Self::NodeId) -> &Self::Node {
@@ -113,14 +137,20 @@ impl<N, E> interface::Graph for AdjacencyList<N, E>
         &mut self.nodes[n.index()]
     }
 
-    #[inline]
-    fn node_ids(&self) -> Self::NodeIdIterator {
-        Indices::new(0..self.nodes.len())
+    #[inline(always)]
+    fn edge(&self, e: Self::EdgeId) -> &Self::Edge {
+        &self.edges[e.index()]
     }
 
-    #[inline]
-    fn node_count(&self) -> usize {
-        self.nodes.len()
+    #[inline(always)]
+    fn edge_mut(&mut self, e: Self::EdgeId) -> &mut Self::Edge {
+        &mut self.edges[e.index()]
+    }
+
+    #[inline(always)]
+    fn add_node<T: Into<Self::Node>>(&mut self, n: T) -> Self::NodeId {
+        self.nodes.push(n.into());
+        Self::NodeId::new(self.nodes.len() - 1)
     }
 
     fn add_edge<T: Into<Self::Edge>>(&mut self, e: T) -> Self::EdgeId {
@@ -139,22 +169,6 @@ impl<N, E> interface::Graph for AdjacencyList<N, E>
         self.nodes[destidx].add_incoming_edge(index);
 
         index
-    }
-
-    fn edge(&self, e: Self::EdgeId) -> &Self::Edge {
-        &self.edges[e.index()]
-    }
-
-    fn contains_edge(&self, e: Self::EdgeId) -> bool {
-        e.index() < self.edges.len()
-    }
-
-    fn edge_ids(&self) -> Self::EdgeIdIterator {
-        Indices::new(0..self.edges.len())
-    }
-
-    fn edge_count(&self) -> usize {
-        self.edges.len()
     }
 }
 

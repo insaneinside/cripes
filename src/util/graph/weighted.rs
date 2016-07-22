@@ -2,16 +2,14 @@
 
 use std;
 use std::ops::{Deref,DerefMut};
-use std::fmt::Debug;
 
 use smallvec::SmallVec;
 
 use super::interface::{self, Id};
-use super::common::{IndexType,NodeIndex,EdgeIndex};
 
 /// Trait bounds for types used as edge and node data payloads.
-pub trait Data: Clone + Debug {}
-impl<T> Data for T where T: Clone + Debug {}
+pub trait Data: Clone {}
+impl<T> Data for T where T: Clone {}
 
 // ----------------------------------------------------------------
 // Edge
@@ -25,8 +23,23 @@ pub struct Edge<T: Data, I: Id> {
 }
 
 impl<T, I> interface::Edge for Edge<T, I>
-    where T: Data, I: Id {
-    impl_basic_edge!(I);
+    where I: Id,
+          T: Data {
+    type NodeId = I;
+    #[inline]
+    fn endpoints(&self) -> (Self::NodeId, Self::NodeId) {
+        (self.source, self.target)
+    }
+}
+
+impl<T, I> interface::DirectedEdge for Edge<T, I>
+    where I: Id,
+          T: Data {
+    #[inline]
+    fn source(&self) -> I { self.source }
+
+    #[inline]
+    fn target(&self) -> I { self.target }
 }
 
 impl<T: Data, I: Id> Edge<T, I> {
@@ -112,49 +125,35 @@ impl<T: Data, I: Id> Node<T, I> {
 
 impl<T: Data, I: Id> Deref for Node<T, I> {
     type Target = T;
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
 impl<T: Data, I: Id> DerefMut for Node<T, I> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
         &mut self.data
     }
 }
 
-impl<T, I> interface::Node for Node<T, I>
-        where T: Data, I: Id {
-    impl_basic_node!(I);
+impl<T: Data, I: Id> From<T> for Node<T, I> {
+    #[inline]
+    fn from(data: T) -> Self {
+        Self::new(data)
+    }
 }
 
-
-// ----------------------------------------------------------------
-// AdjacencyList
-
-impl<N: Data, E: Data, Ix: IndexType> super::common::AdjacencyList<Node<N, EdgeIndex<Ix>>, Edge<E, NodeIndex<Ix>>> {
-    /// Add a node to the graph.
-    ///
-    /// @return Index of the newly-added node.
-    pub fn add_node(&mut self, data: N) -> NodeIndex<Ix> {
-        <Self as interface::Graph>::add_node(self, /*<Self as interface::Graph>::*/Node::new(data))
+impl<T, I> interface::Node for Node<T, I>
+    where T: Data, I: Id {
+    type EdgeId = I;
+    fn edges(&self) -> std::iter::Chain<std::slice::Iter<Self::EdgeId>,std::slice::Iter<Self::EdgeId>> {
+        self.incoming_edges.iter().chain(self.outgoing_edges.iter())
     }
+}
 
-    /// Add an edge to the graph.
-    ///
-    /// The source and target nodes, as identified by calling `edge.source()`
-    /// and `edge.target()` on the edge, will be updated as appropriate.
-    ///
-    /// **Panics** if either of the source or target node indices are invalid.
-    ///
-    /// @return Index of the newly-added edge.
-    ///
-    /// @fixme Is there any way we can make this operation atomic, or at least
-    /// less drawn-out?
-    #[inline(always)]
-    pub fn add_edge(&mut self, source: NodeIndex<Ix>, target: NodeIndex<Ix>, data: E) -> EdgeIndex<Ix> {
-
-        // Add the edge itself
-        <Self as interface::Graph>::add_edge(self, Edge::new(source, target, data))
-    }
+impl<T, I> interface::DirectedNode for Node<T, I>
+    where T: Data, I: Id {
+    impl_basic_node!(I);
 }

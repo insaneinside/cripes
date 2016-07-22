@@ -63,7 +63,7 @@ use smallvec::SmallVec;
 
 use bit_vec::BitVec;
 
-use super::interface::{Graph,Id};
+use super::interface::{DirectedGraph, Graph, Id};
 
 
 // ================================================================
@@ -205,8 +205,10 @@ impl<G: Graph + Debug> RootedAlgorithm<G> for DepthFirst<G> {
 }
 
 
-impl<G: Graph + Debug> Algorithm<G> for DepthFirst<G> {
-    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
+impl<G> Algorithm<G> for DepthFirst<G>
+    where G: Debug + DirectedGraph
+{
+    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
         if let Some(next) = self.stack.pop() {
             self.stack.extend(g.direct_successors(next).rev());
             Some(next)
@@ -226,7 +228,9 @@ pub struct BreadthFirst<G: Graph> {
     queue: VecDeque<<G as Graph>::NodeId>
 }
 
-impl<G: Graph + Debug> RootedAlgorithm<G> for BreadthFirst<G> {
+impl<G> RootedAlgorithm<G> for BreadthFirst<G>
+    where G: Debug + DirectedGraph
+{
     /// Create a breadth-first search object starting at the specified node.
     fn new(_: &G, entry: <G as Graph>::NodeId) -> Self {
         let mut queue = VecDeque::with_capacity(BREADTH_FIRST_INITIAL_QUEUE_CAPACITY);
@@ -235,7 +239,9 @@ impl<G: Graph + Debug> RootedAlgorithm<G> for BreadthFirst<G> {
     }
 }
 
-impl<G: Graph + Debug> Algorithm<G> for BreadthFirst<G> {
+impl<G> Algorithm<G> for BreadthFirst<G>
+    where G: Debug + DirectedGraph
+{
     fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
         if let Some(next) = self.queue.pop_front() {
             self.queue.extend(g.direct_successors(next));
