@@ -12,7 +12,7 @@ use std::ops::{Deref, DerefMut, Index, Range, RangeFrom, RangeFull, RangeTo};
 /// Vec-like type with support for saving and restoring states via stack-like
 /// operations
 ///
-/// 
+///
 #[derive(Clone)]
 pub struct SplitVec<T> {
     data: Vec<T>,
@@ -81,7 +81,7 @@ impl<T> SplitVec<T> {
     /// Calling this method will have no effect if no prior state exists.
     ///
     /// # Examples
-    ///    
+    ///
     /// ```rust
     /// # extern crate cripes;
     /// # use cripes::util::splitvec::SplitVec;
@@ -123,7 +123,7 @@ impl<T> SplitVec<T> {
     /// Remove the top-most item from the working state and return it.
     ///
     /// # Examples
-    ///    
+    ///
     /// ```rust
     /// # extern crate cripes;
     /// # use cripes::util::splitvec::SplitVec;
@@ -138,7 +138,7 @@ impl<T> SplitVec<T> {
     ///
     /// `pop` works only within the current state, and will return `None` if the
     /// current state is empty even if a prior state is not:
-    /// 
+    ///
     /// ```rust
     /// # extern crate cripes;
     /// # use cripes::util::splitvec::SplitVec;
@@ -243,6 +243,28 @@ impl<T> fmt::Debug for SplitVec<T> where T: fmt::Debug {
     }
 }
 
+macro_rules! impl_from_array_reference_types {
+    ($($N: expr)+) => {
+        $(
+            impl<'a,T> From<&'a [T; $N]> for SplitVec<T> where T: Copy {
+                  fn from(a: &'a [T; $N]) -> Self {
+                      let mut sv = SplitVec::new();
+                      sv.extend_from_slice(a);
+                      sv
+                  }
+            }
+        )+
+    }
+}
+
+impl_from_array_reference_types!{
+    0  1  2  3  4  5  6  7  8  9
+   10 11 12 13 14 15 16 17 18 19
+   20 21 22 23 24 25 26 27 28 29
+   30 31 32
+}
+
+
 impl<T> AsRef<SplitVec<T>> for SplitVec<T> {
     fn as_ref(&self) -> &Self {
         self
@@ -346,6 +368,7 @@ impl<T> Index<RangeFull> for SplitVec<T> {
     type Output = [T];
     #[inline(always)]
     fn index<'a>(&'a self, _: RangeFull) -> &'a [T] {
-        &self.data[..]
+        let o = self.offset();
+        &self.data[o..]
     }
 }
