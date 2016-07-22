@@ -243,6 +243,29 @@ impl<T> fmt::Debug for SplitVec<T> where T: fmt::Debug {
     }
 }
 
+impl<T> AsRef<SplitVec<T>> for SplitVec<T> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<T> AsMut<SplitVec<T>> for SplitVec<T> {
+    fn as_mut(&mut self) -> &mut Self {
+        self
+    }
+}
+
+impl<T> AsRef<[T]> for SplitVec<T> {
+    fn as_ref(&self) -> &[T] {
+        self
+    }
+}
+impl<T> AsMut<[T]> for SplitVec<T> {
+    fn as_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+
+
 impl<T> From<Vec<T>> for SplitVec<T> {
     fn from(v: Vec<T>) -> Self {
         SplitVec{data: v, splits: Vec::new()}
