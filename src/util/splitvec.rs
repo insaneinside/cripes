@@ -202,6 +202,20 @@ impl<T> SplitVec<T> {
     pub fn iter_states<'a>(&'a self) -> StateIter<'a, T> {
         StateIter{splits_iter: self.splits.iter(), data: &self.data[..], last_split: Some(0)}
     }
+
+    /// Fetch a view of the previous state as a slice.
+    pub fn prev_state<'a>(&'a self) -> Option<&'a [T]> {
+        let len = self.splits.len();
+        if len == 0 {
+            None
+        } else {
+            let (a, b) =
+                if len >= 2 { (self.splits[len - 2], self.splits[len - 1]) }
+                else if len >= 1 { (0, self.splits[len - 1]) }
+                else { unreachable!() };
+            Some(&self.data[a..b])
+        }
+    }
 }
 
 /// Iterator over the states of a SplitVec as slices.
