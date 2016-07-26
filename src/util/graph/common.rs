@@ -57,6 +57,45 @@ impl_index_wrapper_type!(NodeIndex<T>,NodeIndex,T);
 
 
 // --------------------------------
+
+/// Implement `interface::Node` for a type with members `incoming_edges` and
+/// `outgoing_edges` of types compatible with `Vec<$I>`.
+macro_rules! impl_basic_node {
+    ($I: ident) => {
+        //type EdgeIter<'a> = std::slice::Iter<'a,$I>;
+
+        #[inline(always)]
+        fn incoming_edges(&self) -> std::slice::Iter<$I> {
+            self.incoming_edges.iter()
+        }
+
+
+        fn incoming_edge_count(&self) -> usize {
+            self.incoming_edges.len()
+        }
+
+        #[inline(always)]
+        fn outgoing_edges(&self) -> std::slice::Iter<$I> {
+            self.outgoing_edges.iter()
+        }
+
+        fn outgoing_edge_count(&self) -> usize {
+            self.outgoing_edges.len()
+        }
+
+        #[inline(always)]
+        fn add_incoming_edge(&mut self, e: $I) {
+            self.incoming_edges.push(e);
+        }
+
+        #[inline(always)]
+        fn add_outgoing_edge(&mut self, e: $I) {
+            self.outgoing_edges.push(e);
+        }
+    }
+}
+
+// --------------------------------
 // AdjacencyList
 
 /// Adjacency-list graph implementation.
