@@ -1,3 +1,4 @@
+use std::mem;
 use std::convert::AsRef;
 use cripes::symbol::{Pool,Type,Unpacked,Inline,PackFormat};
 use std::string::String;
@@ -5,7 +6,6 @@ use std::string::String;
 macro_rules! inline_test_strings {
     () => ((0u8..16u8).map(|i| (0u8..i).map(|j| (j  + 'a' as u8) as char).collect::<String>()));
 }
-
 
 #[test]
 fn inline_as_slice() {
@@ -51,8 +51,8 @@ fn pooled_pack_unpack() {
     let a_str = "it was a very nice day";
     let b_str = "and everyone was happy";
 
-    let a = pool.symbol(a_str);
-    let b = pool.symbol(b_str);
+    let a = unsafe { pool.symbol(a_str) };
+    let b = unsafe { pool.symbol(b_str) };
     assert_eq!(a.type_of(), Type::POOLED);
     assert_eq!(b.type_of(), Type::POOLED);
 
