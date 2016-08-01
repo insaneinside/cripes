@@ -47,6 +47,7 @@
 //!
 
 use std;
+use std::hash::Hash;
 use std::fmt::Debug;
 use std::iter::{Chain,Iterator};
 
@@ -54,7 +55,7 @@ use super::visit::{self,Visit};
 use super::iter::Successors;
 
 /// Interface provided by node and edge identifiers.
-pub trait Id: Copy + Debug + PartialEq + PartialOrd {
+pub trait Id: Copy + Debug + Hash + Eq + PartialEq + PartialOrd + From<usize> {
     /// Create a new Id object with the given value.
     fn new(v: usize) -> Self;
 

@@ -3,7 +3,7 @@
 use std::ops;
 use std::fmt::Debug;
 use std::default::Default;
-use std::hash::{Hash,Hasher};
+use std::hash::{Hash};
 
 use num_traits::{NumCast,ToPrimitive};
 
@@ -30,28 +30,21 @@ macro_rules! impl_index_wrapper_type {
             fn index(&self) -> usize { NumCast::from(self.0).unwrap() }
         }
 
-        impl<$T: IndexType> From<$T> for $tp {
-            fn from(v: $T) -> Self {
+        impl<U: NumCast + ToPrimitive, $T: IndexType> From<U> for $tp {
+            fn from(v: U) -> Self {
                 Self::new(NumCast::from(v).unwrap())
-            }
-        }
-
-        impl<$T: IndexType> Hash for $tp {
-            #[inline(always)]
-            fn hash<H: Hasher>(&self, h: &mut H) {
-                <$T as Hash>::hash(&self.0, h);
             }
         }
     }
 }
 
 /// Type used to identify and index the edges of a graph.
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct EdgeIndex<T: IndexType>(T);
 impl_index_wrapper_type!(EdgeIndex<T>,EdgeIndex,T);
 
 /// Type used to identify and index the nodes of a graph.
-#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NodeIndex<T: IndexType>(T);
 impl_index_wrapper_type!(NodeIndex<T>,NodeIndex,T);
 
