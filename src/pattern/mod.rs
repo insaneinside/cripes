@@ -20,8 +20,6 @@ use regex_syntax::{Expr,Repeater};
 
 use util::graph::{self,Builder,Graph as Graphlike,Id as GraphID};
 
-pub mod analysis;
-use self::analysis::{FlowStructure,NodeAnalysis};
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + PartialOrd<Self> {}
