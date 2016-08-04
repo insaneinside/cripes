@@ -3,6 +3,16 @@ name="cripes"
 version="0.0.1"
 authors=["Collin J. Sutton"]
 
+[features]
+default = ["regex", "dot"]
+
+# `dot`:  build binaries for producing state diagrams for grammar automatons in
+# GraphViz `dot` format.
+
+# `regex`: Enable support for converting regular expressions in `regex` syntax
+# to Cripes patterns
+regex = ["regex-syntax"]
+
 [lib]
 name="cripes"
 path="src/lib.rs"
@@ -11,11 +21,16 @@ path="src/lib.rs"
 name="test"
 path="test/mod.rs"
 
+[dev-dependencies]
+char-iter = "0.1"
+
 [dependencies]
-anymap = "*"
-regex-syntax = "*"
-dot = "*"
+bitflags = "0.7.0"
+bit-vec = "*"
+bit-set = "0.4.0"
 num-traits = "*"
 smallvec = "*"
-bit-vec = "*"
 itertools = "*"
+
+dot = { version = "^0.1.0", optional = true }
+regex-syntax = { version = "^0.3.0", optional = true }
