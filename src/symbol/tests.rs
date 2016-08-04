@@ -1,7 +1,7 @@
-use std::string::String;
-use std::convert::AsRef;
+//! Tests for `symbol` utilities that require access to `symbol::private`
 
-use cripes::symbol::{Pool,Type,Unpacked,Inline,PackFormat};
+use super::Pool;
+use super::private::{Type,Unpacked,Inline,PackFormat};
 
 macro_rules! inline_test_strings {
     () => ((0u8..16u8).map(|i| (0u8..i).map(|j| (j  + 'a' as u8) as char).collect::<String>()));
@@ -47,12 +47,12 @@ fn inline_pack_unpack() {
 
 #[test]
 fn pooled_pack_unpack() {
-    let mut pool = Pool::new();
+    let pool = Pool::new();
     let a_str = "it was a very nice day";
     let b_str = "and everyone was happy";
 
-    let a = unsafe { pool.symbol(a_str) };
-    let b = unsafe { pool.symbol(b_str) };
+    let a = pool.sym(a_str).0;
+    let b = pool.sym(b_str).0;
     assert_eq!(a.type_of(), Type::POOLED);
     assert_eq!(b.type_of(), Type::POOLED);
 
@@ -61,22 +61,6 @@ fn pooled_pack_unpack() {
 
     assert_eq!(a, a);
     panic_unless!(a != b && b != a, "`a` and `b` are distinct symbols and should not be equal");
-    assert_eq!(a.as_ref(), a_str);
-    assert_eq!(b.as_ref(), b_str);
-}
-
-
-// Can we create more than one symbol at a time?  Motivated by the problem with
-// doing so when lifetime-safe symbols were introduced.
-#[test]
-fn test_sym() {
-    let pool = Pool::new();
-    let a_str = "it was a very nice day";
-    let b_str = "and everyone was happy";
-
-    let a = pool.sym(a_str);
-    let b = pool.sym(b_str);
-
     assert_eq!(a.as_ref(), a_str);
     assert_eq!(b.as_ref(), b_str);
 }

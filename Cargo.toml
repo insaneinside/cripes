@@ -21,7 +21,12 @@ path="src/lib.rs"
 name="test"
 path="test/mod.rs"
 
+[[test]]
+name="compiletest"
+path="tests/tests.rs"
+
 [dev-dependencies]
+compiletest_rs = "0.2.0"
 char-iter = "0.1"
 
 [dependencies]
