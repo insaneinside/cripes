@@ -26,3 +26,4 @@ macro_rules! panic_unless {
 pub mod hash;
 pub mod flex_box;
 pub mod graph;
+pub mod splitvec;
