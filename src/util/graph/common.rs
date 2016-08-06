@@ -220,6 +220,17 @@ macro_rules! graph_index_impl {
             }
 
         }
+        impl<'a, $n, $e, Ix> ops::Index<&'a $tp> for AdjacencyList<N, E>
+            where N: interface::Node,
+                  E: interface::Edge,
+                  Ix: IndexType {
+            type Output = $r;
+            fn index(&self, ix: &'a $tp) -> &$r {
+                &self.$m[ix.index()]
+            }
+
+        }
+
         impl<$n, $e, Ix> ops::IndexMut<$tp> for AdjacencyList<N, E>
             where N: interface::Node,
                   E: interface::Edge,
@@ -229,6 +240,16 @@ macro_rules! graph_index_impl {
             }
 
         }
+        impl<'a, $n, $e, Ix> ops::IndexMut<&'a $tp> for AdjacencyList<N, E>
+            where N: interface::Node,
+                  E: interface::Edge,
+                  Ix: IndexType {
+            fn index_mut(&mut self, ix: &'a $tp) -> &mut $r {
+                &mut self.$m[ix.index()]
+            }
+
+        }
+
     }
 }
 graph_index_impl!(EdgeIndex<Ix>, N, E, E, edges);
