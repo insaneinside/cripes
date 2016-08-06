@@ -192,8 +192,8 @@ impl<N, E> interface::ConcreteGraph for AdjacencyList<N, E>
         let destidx = b.index();
 
         let node_count = self.node_count();
-        panic_unless!(srcidx < node_count, "Invalid source-node index provided to `Graph::add_edge`");
-        panic_unless!(destidx < node_count, "Invalid target-node index provided to `Graph::add_edge`");
+        panic_unless!(srcidx < node_count, "Invalid source node provided to `Graph::add_edge`: {:?}", a);
+        panic_unless!(destidx < node_count, "Invalid target node provided to `Graph::add_edge`: {:?}", b);
 
         self.edges.push(edge);
         let index = Self::EdgeId::new(self.edges.len() - 1);
