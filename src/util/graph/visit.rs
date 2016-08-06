@@ -29,7 +29,7 @@
 //!
 //! // Define a convenience function to determine the order in which nodes are
 //! // walked.
-//! fn walk_order<G, A>(g: &G, entry: <G as Graph>::NodeId) -> Vec<usize>
+//! fn walk_order<G, A>(g: &G, entry: G::NodeId) -> Vec<usize>
 //!     where G: Graph, A: visit::RootedAlgorithm<G> {
 //!     g.iter::<A>(entry).map(|id| id.index()).collect::<Vec<_>>()
 //! }
@@ -72,7 +72,7 @@ use super::interface::{DirectedGraph, Graph, Id};
 /// Visitation-order selection helper.
 pub trait Algorithm<G: Graph>: Debug {
     /// Select the next node to visit.
-    fn next(&mut self, v: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId>;
+    fn next(&mut self, v: &VisitorState<G>, g: &G) -> Option<G::NodeId>;
 }
 
 
@@ -82,7 +82,7 @@ pub trait Algorithm<G: Graph>: Debug {
 /// the graph.
 pub trait RootedAlgorithm<G: Graph>: Algorithm<G> {
     /// Instantiate and initialize the algorithm object.
-    fn new(g: &G, entry: <G as Graph>::NodeId) -> Self;
+    fn new(g: &G, entry: G::NodeId) -> Self;
 }
 
 
@@ -90,26 +90,29 @@ pub trait RootedAlgorithm<G: Graph>: Algorithm<G> {
 // Visitor
 
 /// Mutable common state for visitors.
+///
+/// VisitorState tracks which nodes in a graph have been visited by
+/// a traversal algorithm.
 pub struct VisitorState<G: Graph> {
     /// Node most recently visited.
-    pub current_node: <G as Graph>::NodeId,
+    pub current_node: G::NodeId,
     /// Map of visited nodes.
     visited: BitVec<u32>
 }
 
 impl<G: Graph> VisitorState<G> {
     /// Crate a new state object for the specified graph and entry node.
-    pub fn new(g: &G, entry: <G as Graph>::NodeId) -> VisitorState<G> {
+    pub fn new(g: &G, entry: G::NodeId) -> VisitorState<G> {
         VisitorState{current_node: entry, visited: BitVec::from_elem(g.node_count(), false)}
     }
 
     /// Check if a particular node has been visited.
-    pub fn visited(&self, node: <G as Graph>::NodeId) -> bool {
+    pub fn visited(&self, node: G::NodeId) -> bool {
         self.visited.get(node.index()).unwrap_or_else(|| false)
     }
 
     /// Move to the specified node and mark it as visited.
-    fn move_to(&mut self, n: <G as Graph>::NodeId) {
+    fn move_to(&mut self, n: G::NodeId) {
         self.visited.set(n.index(), true);
         self.current_node = n;
     }
@@ -127,7 +130,7 @@ pub struct VisitorIter<'a,G: 'a + Graph, V: Visit<G>> {
 }
 
 impl<'a, G: 'a + Graph, V: Visit<G>> Iterator for VisitorIter<'a, G, V> {
-    type Item = <G as Graph>::NodeId;
+    type Item = G::NodeId;
     fn next(&mut self) -> Option<Self::Item> {
         self.visitor.next(self.graph)
     }
@@ -145,7 +148,7 @@ pub struct Visitor<G: Graph, A: Algorithm<G>> where A: Sized {
 /// algorithm used.
 pub trait Visit<G: Graph> {
     /// Determine the next node to inspect.
-    fn next(&mut self, g: &G) -> Option<<G as Graph>::NodeId>;
+    fn next(&mut self, g: &G) -> Option<G::NodeId>;
 
     /*/// Fetch a const reference to the visitor's state data.
     fn state(&self) -> &VisitorState<G>;
@@ -163,13 +166,13 @@ pub trait Visit<G: Graph> {
 impl<G, A> Visitor<G, A>
     where G: Graph, A: Sized + Algorithm<G> + RootedAlgorithm<G> {
     /// Create a Visitor instance for the given entry point.
-    pub fn new(g: &G, entry: <G as Graph>::NodeId) -> Self {
+    pub fn new(g: &G, entry: G::NodeId) -> Self {
         Visitor{state: VisitorState::new(g, entry), algo: A::new(g, entry)}
     }
 }
 
 impl<G: Graph, A: Sized + Algorithm<G>> Visit<G> for Visitor<G, A> {
-    fn next(&mut self, g: &G) -> Option<<G as Graph>::NodeId> {
+    fn next(&mut self, g: &G) -> Option<G::NodeId> {
         if let Some(node) = self.algo.next(&self.state, g) {
             panic_unless!(g.contains_node(node), "Invalid node ID {:?} produced by algorithm {:?}", node, self.algo);
             self.state.move_to(node);
@@ -193,12 +196,14 @@ const BREADTH_FIRST_INITIAL_QUEUE_CAPACITY: usize = 8;
 /// Memory: allocates on the heap.
 #[derive(Debug)]
 pub struct DepthFirst<G: Graph> {
-    stack: SmallVec<[<G as Graph>::NodeId; DEPTH_FIRST_INITIAL_STACK_CAPACITY]>
+    stack: SmallVec<[G::NodeId; DEPTH_FIRST_INITIAL_STACK_CAPACITY]>
 }
 
-impl<G: Graph + Debug> RootedAlgorithm<G> for DepthFirst<G> {
+impl<G> RootedAlgorithm<G> for DepthFirst<G>
+    where G: Debug + DirectedGraph
+{
     /// Create a depth-first search object starting at the specified node.
-    fn new(_: &G, entry: <G as Graph>::NodeId) -> Self {
+    fn new(_: &G, entry: G::NodeId) -> Self {
         let mut stack = SmallVec::new(); stack.push(entry);
         DepthFirst{stack: stack}
     }
@@ -225,14 +230,14 @@ impl<G> Algorithm<G> for DepthFirst<G>
 
 #[derive(Debug)]
 pub struct BreadthFirst<G: Graph> {
-    queue: VecDeque<<G as Graph>::NodeId>
+    queue: VecDeque<G::NodeId>
 }
 
 impl<G> RootedAlgorithm<G> for BreadthFirst<G>
     where G: Debug + DirectedGraph
 {
     /// Create a breadth-first search object starting at the specified node.
-    fn new(_: &G, entry: <G as Graph>::NodeId) -> Self {
+    fn new(_: &G, entry: G::NodeId) -> Self {
         let mut queue = VecDeque::with_capacity(BREADTH_FIRST_INITIAL_QUEUE_CAPACITY);
         queue.push_back(entry);
         BreadthFirst{queue: queue}
@@ -242,7 +247,7 @@ impl<G> RootedAlgorithm<G> for BreadthFirst<G>
 impl<G> Algorithm<G> for BreadthFirst<G>
     where G: Debug + DirectedGraph
 {
-    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<<G as Graph>::NodeId> {
+    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
         if let Some(next) = self.queue.pop_front() {
             self.queue.extend(g.direct_successors(next));
             Some(next)
