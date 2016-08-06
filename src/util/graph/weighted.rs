@@ -48,6 +48,11 @@ impl<T: Data, I: Id> Edge<T, I> {
     pub fn new(source: I, target: I, data: T) -> Self {
         Edge{source: source, target: target, data: data}
     }
+
+    /// Retrieve a reference to the edge's data (weight)
+    pub fn data(&self) -> &T {
+        &self.data
+    }
 }
 
 impl<T: Data, I: Id> Deref for Edge<T, I> {
@@ -120,6 +125,11 @@ impl<T: Data, I: Id> Node<T, I> {
     /// Instantiate a node with the given data.
     pub fn new(data: T) -> Self {
         Node{incoming_edges: SmallVec::new(), outgoing_edges: SmallVec::new(), data: data}
+    }
+
+    /// Retrieve a reference to the nodes's data (weight)
+    pub fn data(&self) -> &T {
+        &self.data
     }
 }
 
