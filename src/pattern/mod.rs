@@ -345,6 +345,19 @@ impl<T: Atom> From<T> for ClassMember<T> {
     fn from(a: T) -> Self { ClassMember::Atom(a) }
 }
 
+impl From<regex_syntax::ClassRange> for ClassMember<ByteOrChar> {
+    fn from(cr: regex_syntax::ClassRange) -> Self {
+        ClassMember::Range(cr.start.into(), cr.end.into())
+    }
+}
+
+impl From<regex_syntax::ByteRange> for ClassMember<ByteOrChar> {
+    fn from(cr: regex_syntax::ByteRange) -> Self {
+        ClassMember::Range(cr.start.into(), cr.end.into())
+    }
+}
+
+
 impl From<regex_syntax::ClassRange> for ClassMember<char> {
     fn from(cr: regex_syntax::ClassRange) -> Self {
         ClassMember::Range(cr.start, cr.end)
