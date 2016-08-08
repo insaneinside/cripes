@@ -30,7 +30,6 @@ use std::fmt::{self,Display,Debug};
 
 #[cfg(feature="regex")]
 use regex_syntax::{self, Expr, Repeater};
-
 use num_traits::{NumCast,ToPrimitive};
 
 pub mod codegen;
@@ -38,6 +37,37 @@ pub mod codegen;
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord {}
+
+
+/// Atom type for use with mixed binary/text data.
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub enum ByteOrChar {
+    /// Single byte
+    Byte(u8),
+    /// Character
+    Char(char)
+}
+
+impl From<u8> for ByteOrChar {
+    fn from(byte: u8) -> Self {
+        ByteOrChar::Byte(byte)
+    }
+}
+
+impl From<char> for ByteOrChar {
+    fn from(c: char) -> Self {
+        ByteOrChar::Char(c)
+    }
+}
+
+impl ByteOrChar {
+    fn as_char(&self) -> char {
+        match self {
+            &ByteOrChar::Byte(b) => b as char,
+            &ByteOrChar::Char(c) => c,
+        }
+    }
+}
 
 
 /// An action to be performed immediately before or after any pattern element
@@ -123,6 +153,45 @@ impl Display for Transition<char> {
     }
 }
 
+impl Display for Transition<ByteOrChar> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Transition::Atom(c) => {
+                match c {
+                    ByteOrChar::Byte(b) => Display::fmt(&Transition::Atom(b), f),
+                    ByteOrChar::Char(c) => Display::fmt(&Transition::Atom(c), f)
+                } },
+            &Transition::Literal(ref x) => write!(f, "'{}'", String::from_iter(x.iter().map(|c| c.as_char()))),
+            &Transition::Wildcard => f.write_str("(any)"),
+            _ => <Self as Debug>::fmt(self, f)
+        }
+    }
+}
+
+impl Display for Transition<u8> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Transition::Atom(ref c) => {
+                let x = *c as char;
+                if x.is_whitespace() || x.is_control() {
+                    write!(f, "'{}'", x.escape_default().collect::<String>()) }
+                else { write!(f, "{:?}", x) } },
+            Transition::Literal(ref x) => write!(f, "'{}'", String::from_iter(x.iter().map(|c| *c as char))),
+            Transition::Wildcard => f.write_str("(any)"),
+            _ => <Self as Debug>::fmt(self, f)
+        }
+
+    }
+}
+
+impl<'a,T: Atom> FromIterator<T> for Transition<T> {
+    fn from_iter<I: IntoIterator<Item=T>>(v: I) -> Self {
+        let mut iter = v.into_iter();
+        if iter.size_hint().0 > 1 { Transition::Literal(iter.collect()) }
+        else { Transition::Atom(iter.next().unwrap().into()) }
+     }
+}
+
 
 impl<T: Atom> From<T> for Transition<T> {
     fn from(atom: T) -> Self {
@@ -130,47 +199,91 @@ impl<T: Atom> From<T> for Transition<T> {
     }
 }
 
-impl<'a,T: Atom> From<&'a [T]> for Transition<T> {
-    fn from(lit: &'a [T]) -> Self {
-        Transition::Literal(lit.into())
+/// Macro for composing the match in a `From<regex_syntax::Expr> for
+/// Transition<...>` impl.
+///
+/// Useful because we have several types (u8, char, ByteOrChar) that can act as
+/// atoms, and parts of their implementations of this trait can be shared.
+macro_rules! transition_from_expr_match {
+    ($input:ident => ($($rest:ident)+)) => (transition_from_expr_match!($input => ($($rest)+) ;));
+
+
+    ($input:ident => ( ); $($built:tt)*) => (
+        match $input {
+            $($built)+
+        }
+    );
+
+    ($input:ident => (_char $($rest:ident)*); $($built:tt)*) => (
+        transition_from_expr_match!($input => ( $($rest)* );
+                                    $($built)*
+                                    Expr::Literal{chars, casei} => {
+                                        if casei { panic!("Case-insensitive matching is not supported") }
+                                        if chars.len() > 1 { Transition::Literal(chars.into_iter().map(|c| c.into()).collect()) }
+                                        else { Transition::Atom(chars[0].into()) } },
+                                    Expr::AnyChar => Transition::Wildcard,
+                                    Expr::AnyCharNoNL =>  Transition::Class(Class::new(Polarity::INVERTED, [ClassMember::Atom('\n'.into())].iter().cloned())),
+                                    Expr::Class(c) => {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Transition::Class(c.into()) }
+                                        else { Transition::Atom(first.start.into()) } })
+    );
+    ($input:ident => (_byte $($rest:ident)*); $($built:tt)*) => (
+        transition_from_expr_match!($input => ( $($rest)* );
+                                    $($built)*
+                                    Expr::LiteralBytes{bytes, casei} => {
+                                        if casei { panic!("Case-insensitive matching is not supported") }
+                                        if bytes.len() > 1 { Transition::Literal(bytes.into_iter().map(|b| b.into()).collect()) }
+                                        else { Transition::Atom(bytes[0].into()) } },
+                                    Expr::AnyByte => Transition::Wildcard,
+                                    Expr::AnyByteNoNL => Transition::Class(Class::new(Polarity::INVERTED, [ClassMember::Atom(b'\n'.into())].iter().cloned())),
+                                    Expr::ClassBytes(c) => {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Transition::Class(c.into()) }
+                                        else { Transition::Atom(first.start.into()) } })
+    );
+    ($input:ident => (_common $($rest:ident)*); $($built:tt)*) => (
+        transition_from_expr_match!($input => ( $($rest)* );
+                                    $($built)*
+                                    Expr::Empty => panic!("Empty expressions are not supported"),
+                                    Expr::StartText => Transition::Anchor(Anchor::StartOfInput),
+                                    Expr::EndText => Transition::Anchor(Anchor::EndOfInput),
+                                    Expr::Group{..} => panic!("Groups are not valid transition items"),
+                                    Expr::Repeat{..} => panic!("Repeat expressions are handled at the Element level"),
+                                    Expr::Alternate(_) => panic!("Alternation expressions are handled at the Element level"),
+                                    Expr::Concat(_) => panic!("Concatenation expressions are handled at the Element level"),
+                                    /*Expr::StartLine => unimplemented!(),
+                                    Expr::EndLine => unimplemented!(),
+                                    Expr::WordBoundary => unimplemented!(),
+                                    Expr::NotWordBoundary => unimplemented!(),
+                                    Expr::WordBoundaryAscii => unimplemented!(),
+                                    Expr::NotWordBoundaryAscii => unimplemented!(),*/
+                                    _ => unimplemented!())
+    );
+}
+
+#[cfg(feature="regex")]
+impl From<Expr> for Transition<u8> {
+    fn from(exp: Expr) -> Self {
+        transition_from_expr_match!(exp => (_byte _common))
     }
 }
 
 
 #[cfg(feature="regex")]
 impl From<Expr> for Transition<char> {
-    fn from(expr: Expr) -> Self {
-        match expr {
-            Expr::Empty => unimplemented!(),
-            Expr::LiteralBytes{..} => unimplemented!(),
-            Expr::Literal{chars, ..} => {
-                if chars.len() > 1 { panic!("Literals are handled at the Element level") }
-                else { Transition::Atom(chars[0]) } },
-            Expr::AnyChar => Transition::Wildcard,
-            Expr::AnyCharNoNL =>  Transition::Class(Class::new(Polarity::INVERTED, [ClassMember::Atom('\n')].iter().cloned())),
-            Expr::AnyByte => unimplemented!(),
-            Expr::AnyByteNoNL => unimplemented!(),
-            Expr::Class(c) => {
-                let first = c.iter().cloned().nth(0).unwrap();
-                if c.len() > 1 || first.start != first.end { Transition::Class(c.into()) }
-                else { Transition::Atom(first.start) } },
-            Expr::ClassBytes(..) => unimplemented!(),
-            Expr::StartLine => unimplemented!(),
-            Expr::EndLine => unimplemented!(),
-            Expr::StartText => Transition::Anchor(Anchor::StartOfInput),
-            Expr::EndText => Transition::Anchor(Anchor::EndOfInput),
-            Expr::WordBoundary => unimplemented!(),
-            Expr::NotWordBoundary => unimplemented!(),
-            Expr::WordBoundaryAscii => unimplemented!(),
-            Expr::NotWordBoundaryAscii => unimplemented!(),
-            Expr::Group{..} => panic!("Groups are not valid transition items"),
-            Expr::Repeat{..} => panic!("Repeat expressions are handled at the Element level"),
-            Expr::Alternate(_) => panic!("Alternation expressions are handled at the Element level"),
-            Expr::Concat(_) => panic!("Concatenation expressions are handled at the Element level"),
-
-        }
+    fn from(exp: Expr) -> Self {
+        transition_from_expr_match!(exp => (_char _common))
     }
 }
+
+#[cfg(feature="regex")]
+impl From<Expr> for Transition<ByteOrChar> {
+    fn from(exp: Expr) -> Self {
+        transition_from_expr_match!(exp => (_byte _char _common))
+    }
+}
+
 // ----------------------------------------------------------------
 // Class
 
@@ -239,6 +352,12 @@ impl From<regex_syntax::ClassRange> for ClassMember<char> {
 }
 
 
+impl From<regex_syntax::ByteRange> for ClassMember<u8> {
+    fn from(cr: regex_syntax::ByteRange) -> Self {
+        ClassMember::Range(cr.start, cr.end)
+    }
+}
+
 use std::ops::Sub;
 impl<T: Atom> From<Range<T>> for ClassMember<T>
     where T: Sub<usize,Output=T> + Sub<T,Output=usize>
@@ -257,7 +376,6 @@ pub struct Class<T: Atom> {
 }
 
 impl<T: Atom> Class<T> {
-
     /// Create a new Class instance with specified polarity and members taken
     /// from the given iterator.
     pub fn new<I,U>(p: Polarity, items: I) -> Self
@@ -312,20 +430,22 @@ where ClassMember<T>: From<U> {
     }
 }
 
-impl From<regex_syntax::CharClass> for Class<char> {
-    fn from(c: regex_syntax::CharClass) -> Self {
-        Self::from(&c)
-    }
+macro_rules! impl_class_from {
+    ($T: ty, $from: ty) => {
+        impl<'a> From<$from> for Class<$T> {
+            fn from(c: $from) -> Self {
+                Self::new(Polarity::NORMAL,
+                          c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
+                                            else { ClassMember::Atom(cr.start.into()) }))
+            }
+        }
+    };
 }
 
-impl<'a> From<&'a regex_syntax::CharClass> for Class<char> {
-    fn from(c: &'a regex_syntax::CharClass) -> Self {
-        Self::new(Polarity::NORMAL,
-                  c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start, cr.end) }
-                                    else { ClassMember::Atom(cr.start) }))
-    }
-}
-
+impl_class_from!(char, regex_syntax::CharClass);
+impl_class_from!(u8, regex_syntax::ByteClass);
+impl_class_from!(ByteOrChar, regex_syntax::CharClass);
+impl_class_from!(ByteOrChar, regex_syntax::ByteClass);
 
 // ----------------------------------------------------------------
 
@@ -543,28 +663,34 @@ impl<T: Atom> From<T> for Element<T> {
     }
 }
 
-#[cfg(feature="regex")]
-impl From<Expr> for Element<char> {
-    fn from(expr: Expr) -> Self {
-        match expr {
-            Expr::Literal{chars, casei} => {
-                // FIXME: for case-insensitive matches, should we add some sort
-                // of normalization preprocessing action?
-                if casei { panic!("Case-insensitive matching is not yet supported") }
-                if chars.len() > 1 { Element::Sequence(chars.into_iter().map(|c| c.into()).collect()) }
-                else { Element::Atomic(Transition::Atom(chars[0])) } },
-            Expr::Group{e, name, ..}
-            => if let Some(name) = name { Element::Tagged{element: Box::new((*e).into()), name: name} }
-               else { (*e).into() },
-            Expr::Repeat{e, r, greedy} => {
-                if ! greedy { panic!("Non-greedy repetition is not supported"); }
-                Element::Repeat{element: Box::new((*e).into()), count: r.into()} },
-            Expr::Concat(exprs) => Element::Sequence(exprs.into_iter().map(|e| e.into()).collect()),//Tagged::new(e.into())).collect()),
-            Expr::Alternate(exprs) => Element::Union(exprs.into_iter().map(|e| e.into()).collect()),
-            _ => Element::Atomic(expr.into())
+macro_rules! element_from_expr_impl {
+    ($T: ty) => {
+        #[cfg(feature="regex")]
+        impl From<Expr> for Element<$T> {
+            fn from(expr: Expr) -> Self {
+                match expr {
+                    //else { Element::Atomic(chars[0]) } },
+                    Expr::Group{e, name, ..}
+                    => if let Some(name) = name { Element::Tagged{element: Box::new((*e).into()), name: name} }
+                    else { (*e).into() },
+                    Expr::Repeat{e, r, greedy} => {
+                        if ! greedy { panic!("Non-greedy repetition is not supported"); }
+                        Element::Repeat{element: Box::new((*e).into()), count: r.into()} },
+                    Expr::Concat(exprs) => Element::Sequence(exprs.into_iter().map(|e| e.into()).collect()),//Tagged::new(e.into())).collect()),
+                    Expr::Alternate(exprs) => Element::Union(exprs.into_iter().map(|e| e.into()).collect()),
+                    _ => Element::Atomic(expr.into())
+                }
+            }
         }
-    }
+    };
 }
+
+
+
+element_from_expr_impl!(char);
+element_from_expr_impl!(u8);
+element_from_expr_impl!(ByteOrChar);
+
 
 /*
 #[cfg(feature="regex")]
