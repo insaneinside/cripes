@@ -61,7 +61,7 @@ use std::fmt::Debug;
 use std::collections::VecDeque;
 use smallvec::SmallVec;
 
-use bit_vec::BitVec;
+use bit_set::BitSet;
 
 use super::interface::{DirectedGraph, Graph, Id};
 
@@ -97,23 +97,23 @@ pub struct VisitorState<G: Graph> {
     /// Node most recently visited.
     pub current_node: G::NodeId,
     /// Map of visited nodes.
-    visited: BitVec<u32>
+    visited: BitSet<u32>
 }
 
 impl<G: Graph> VisitorState<G> {
     /// Crate a new state object for the specified graph and entry node.
     pub fn new(g: &G, entry: G::NodeId) -> VisitorState<G> {
-        VisitorState{current_node: entry, visited: BitVec::from_elem(g.node_count(), false)}
+        VisitorState{current_node: entry, visited: BitSet::with_capacity(g.node_count())}
     }
 
     /// Check if a particular node has been visited.
-    pub fn visited(&self, node: G::NodeId) -> bool {
-        self.visited.get(node.index()).unwrap_or_else(|| false)
+    pub fn is_visited(&self, node: G::NodeId) -> bool {
+        self.visited.contains(node.index())
     }
 
     /// Move to the specified node and mark it as visited.
     fn move_to(&mut self, n: G::NodeId) {
-        self.visited.set(n.index(), true);
+        self.visited.insert(n.index());
         self.current_node = n;
     }
 }

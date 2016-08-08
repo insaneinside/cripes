@@ -32,7 +32,6 @@ char-iter = "0.1"
 [dependencies]
 arrayvec = "0.3.0"
 bitflags = "0.7.0"
-bit-vec = "*"
 bit-set = "0.4.0"
 num-traits = "*"
 smallvec = "*"

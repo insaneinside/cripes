@@ -23,7 +23,6 @@
 
 
 extern crate num_traits;
-extern crate bit_vec;
 extern crate bit_set;
 extern crate smallvec;
 extern crate arrayvec;
