@@ -34,8 +34,6 @@ use regex_syntax::{self, Expr, Repeater};
 use num_traits::{NumCast,ToPrimitive};
 use arrayvec::ArrayVec;
 
-pub mod codegen;
-
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord {}
