@@ -33,6 +33,8 @@ use std::fmt::{self,Display,Debug};
 use regex_syntax::{self, Expr, Repeater};
 use num_traits::{NumCast,ToPrimitive};
 use arrayvec::ArrayVec;
+use itertools::Itertools;
+
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord {}
@@ -429,9 +431,11 @@ impl<T: Atom> Class<T> {
 
 impl<T: Atom> Debug for Class<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(if self.polarity == Polarity::NORMAL { f.write_str("[") } else { f.write_str("[^") });
-        for m in self.members.iter() { try!(write!(f, "{:?}", m)) }
-        f.write_str("]")
+        if self.polarity == Polarity::NORMAL {
+            write!(f, "[{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
+        } else {
+            write!(f, "[^{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
+        }
     }
 }
 
