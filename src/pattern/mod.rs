@@ -24,6 +24,7 @@
 //! A tagged-element instance can be converted to a `GraphRepr` using `.into()`.
 //!
 
+use std::ptr;
 use std::ops::{BitXor, Deref, DerefMut, Range};
 use std::iter::{FromIterator,IntoIterator};
 use std::fmt::{self,Display,Debug};
@@ -31,6 +32,7 @@ use std::fmt::{self,Display,Debug};
 #[cfg(feature="regex")]
 use regex_syntax::{self, Expr, Repeater};
 use num_traits::{NumCast,ToPrimitive};
+use arrayvec::ArrayVec;
 
 pub mod codegen;
 
@@ -646,6 +648,83 @@ pub enum Element<T: Atom> {
 
 }
 
+/// Flatten certain elements of a parent vector into the parent, using the
+/// passed functions or closures to determine which elements should be
+/// flattened, and how to extract the child vectors from those.
+// FIXME: should we try flattening more than one level at a time?
+fn flatten_vec<T, F, G>(v: &mut Vec<T>, f: F, g: G)
+    where F: Fn(&T) -> Option<usize>, G: Fn(T) -> Vec<T> {
+
+    // Iterate over the elements in the sequence, calling `f` on each and
+    // counting the total number of elements we should have after flattening.
+    let mut child_seqs = ArrayVec::<[_;32]>::new();
+    let mut total_len = 0;
+    for (index, elt) in v.iter_mut().enumerate() {
+        if let Some(len) = f(elt) {
+            total_len += len;
+            child_seqs.push((index, len));
+        } else {
+            total_len += 1;
+        }
+    }
+
+    // `total_len > seq.len()` means we have child sequences that
+    // can be flattened.
+    let cur_len = v.len();
+    if total_len > cur_len {
+        unsafe {
+            v.set_len(total_len);
+            let mut csiter = child_seqs.into_iter().peekable();
+            let vp = v.as_mut_ptr();
+            while let Some((idx, len)) = csiter.next() {
+                let mut cp = vp.clone().offset(idx as isize);
+                let child_vec = g(ptr::read(cp));
+
+                // Move the non-expandable elements following `child_vec` so
+                // they follow the expanded `child_vec`
+                let next_idx = csiter.peek().map(|il| il.0).unwrap_or(cur_len);
+                for i in (idx + 1)..next_idx {
+                    ptr::write(vp.clone().offset((i + len) as isize),
+                               ptr::read(vp.clone().offset(i as isize)))
+                }
+
+                // Expand the child vector.
+                for elt in child_vec {
+                    ptr::write(cp, elt);
+                    cp = cp.offset(1);
+                }
+
+                assert_eq!(cp, vp.clone().offset((idx + len) as isize));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_flatten_vec() {
+    #[derive(Debug, PartialEq, Clone)]
+    enum R { L(u32), V(Vec<R>) }
+    impl R {
+        fn vec_len(&self) -> Option<usize> {
+            match *self {
+                R::V(ref v) => Some(v.len()),
+                _ => None
+            }
+        }
+
+        fn into_vec(self) -> Vec<R> {
+            match self {
+                R::V(v) => v,
+                _ => Vec::from(&[self][..])
+            }
+        }
+    }
+    let mut v = vec![R::L(1), R::L(2), R::V(vec![R::L(3), R::L(4), R::L(5)])];
+    flatten_vec(&mut v,  R::vec_len, R::into_vec);
+    assert_eq!(&[R::L(1), R::L(2), R::L(3), R::L(4), R::L(5)], &v[..]);
+}
+
+
 impl<T: Atom> Element<T> {
     /// Transforms each contained atom using the supplied function or closure
     /// to produce a new Element.
@@ -660,6 +739,55 @@ impl<T: Atom> Element<T> {
             Element::Repeat{element, count} => Element::Repeat{element: Box::new(element.map_atoms(f)), count: count},
             Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
         }
+    }
+
+    /// Get the number of elements in a `Sequence` variant.
+    fn sequence_len(&self) -> Option<usize> {
+        match *self {
+            Element::Sequence(ref v) => Some(v.len()),
+            _ => None
+        }
+    }
+
+    /// Get the number of elements in a `Union` variant.
+    fn union_len(&self) -> Option<usize> {
+        match *self {
+            Element::Union(ref v) => Some(v.len()),
+            _ => None
+        }
+    }
+
+    fn into_vec(self) -> Vec<Element<T>> {
+        match self {
+            Element::Sequence(v) |
+            Element::Union(v)
+                => v,
+            _
+                => panic!("Cannot extract inner Vec from {:?}", self)
+        }
+    }
+
+
+    /// "Reduce" the element in some implementation-defined way.  This method
+    /// is used for common-prefix extraction and flattening of
+    /// unnecessarily-nested pattern elements.
+    pub fn reduce(&mut self) {
+        match *self {
+            Element::Sequence(ref mut seq) => {
+                for elt in seq.iter_mut() {
+                    elt.reduce();
+                }
+                flatten_vec(seq, Self::sequence_len, Self::into_vec);
+            },
+            Element::Union(ref mut vec) => {
+                for elt in vec.iter_mut() {
+                    elt.reduce();
+                }
+                flatten_vec(vec, Self::union_len, Self::into_vec);
+            },
+            _ => ()
+        }
+
     }
 }
 
