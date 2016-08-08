@@ -657,44 +657,58 @@ fn flatten_vec<T, F, G>(v: &mut Vec<T>, f: F, g: G)
 
     // Iterate over the elements in the sequence, calling `f` on each and
     // counting the total number of elements we should have after flattening.
-    let mut child_seqs = ArrayVec::<[_;32]>::new();
-    let mut total_len = 0;
-    for (index, elt) in v.iter_mut().enumerate() {
-        if let Some(len) = f(elt) {
-            total_len += len;
-            child_seqs.push((index, len));
-        } else {
-            total_len += 1;
-        }
-    }
 
-    // `total_len > seq.len()` means we have child sequences that
-    // can be flattened.
+    // To avoid excess heap allocations, we'll use a fixed-size stack-allocated
+    // array to store the locations of expandable child elements; we simply
+    // loop while we have a start offset.
+    let mut child_seqs = ArrayVec::<[_;128]>::new();
+    let mut start_offset = Some(0);
     let cur_len = v.len();
-    if total_len > cur_len {
-        unsafe {
-            v.set_len(total_len);
-            let mut csiter = child_seqs.into_iter().peekable();
-            let vp = v.as_mut_ptr();
-            while let Some((idx, len)) = csiter.next() {
-                let mut cp = vp.clone().offset(idx as isize);
-                let child_vec = g(ptr::read(cp));
+    let mut total_len = 0;
 
-                // Move the non-expandable elements following `child_vec` so
-                // they follow the expanded `child_vec`
-                let next_idx = csiter.peek().map(|il| il.0).unwrap_or(cur_len);
-                for i in (idx + 1)..next_idx {
-                    ptr::write(vp.clone().offset((i + len) as isize),
-                               ptr::read(vp.clone().offset(i as isize)))
+    while let Some(offset) = start_offset.take() {
+        for (index, elt) in v[offset..cur_len].iter_mut().enumerate() {
+            if let Some(len) = f(elt) {
+                total_len += len;
+                // ArrayVec returns `Some(overflow_value)` when it's full.
+                if child_seqs.push((index, len)).is_some() {
+                    // Stored start offset needs to be increased by the number
+                    // of elements the expanded child vectors will store.
+                    start_offset = Some(index + total_len - cur_len);
+                    break;
                 }
+            } else {
+                total_len += 1;
+            }
+        }
 
-                // Expand the child vector.
-                for elt in child_vec {
-                    ptr::write(cp, elt);
-                    cp = cp.offset(1);
+        // `total_len > seq.len()` means we have child sequences that
+        // can be flattened.
+        if total_len > cur_len {
+            unsafe {
+                v.set_len(total_len);
+                let mut csiter = child_seqs.iter().peekable();
+                let vp = v.as_mut_ptr();
+                while let Some(&(idx, len)) = csiter.next() {
+                    let mut cp = vp.clone().offset(idx as isize);
+                    let child_vec = g(ptr::read(cp));
+
+                    // Move the non-expandable elements following `child_vec` so
+                    // they follow the expanded `child_vec`
+                    let next_idx = csiter.peek().map(|il| il.0).unwrap_or(cur_len);
+                    for i in (idx + 1)..next_idx {
+                        ptr::write(vp.clone().offset((i + len) as isize),
+                                   ptr::read(vp.clone().offset(i as isize)))
+                    }
+
+                    // Expand the child vector.
+                    for elt in child_vec {
+                        ptr::write(cp, elt);
+                        cp = cp.offset(1);
+                    }
+
+                    assert_eq!(cp, vp.clone().offset((idx + len) as isize));
                 }
-
-                assert_eq!(cp, vp.clone().offset((idx + len) as isize));
             }
         }
     }
