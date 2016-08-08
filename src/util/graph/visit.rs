@@ -213,9 +213,11 @@ impl<G> RootedAlgorithm<G> for DepthFirst<G>
 impl<G> Algorithm<G> for DepthFirst<G>
     where G: Debug + DirectedGraph
 {
-    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
+    fn next(&mut self, state: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
         if let Some(next) = self.stack.pop() {
-            self.stack.extend(g.direct_successors(next).rev());
+            self.stack.extend(g.direct_successors(next)
+                              .filter(|&sid| ! state.is_visited(sid))
+                              .rev());
             Some(next)
         } else {
             None
@@ -247,9 +249,10 @@ impl<G> RootedAlgorithm<G> for BreadthFirst<G>
 impl<G> Algorithm<G> for BreadthFirst<G>
     where G: Debug + DirectedGraph
 {
-    fn next(&mut self, _: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
+    fn next(&mut self, state: &VisitorState<G>, g: &G) -> Option<G::NodeId> {
         if let Some(next) = self.queue.pop_front() {
-            self.queue.extend(g.direct_successors(next));
+            self.queue.extend(g.direct_successors(next)
+                              .filter(|&sid| ! state.is_visited(sid)));
             Some(next)
         } else {
             None
