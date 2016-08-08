@@ -7,7 +7,7 @@ use std::fmt::Display;
 use std::io::{self, Write};
 
 use cripes::util::graph::{Graph, DirectedGraph, ConcreteGraph, Id, WeightedNode, WeightedEdge};
-use cripes::pattern::Element;
+use cripes::pattern::{Element, ByteOrChar};
 use cripes::automaton::{State, DFA, NFA};
 
 
@@ -75,7 +75,7 @@ fn main() {
                 match regex_syntax::Expr::parse(s) {
                     Ok(expr)
                         => {
-                            let nfa = NFA::from(Element::from(expr));
+                            let nfa = NFA::from(Element::<ByteOrChar>::from(expr));
                             if nfa_only {
                                 dot::render(&G(nfa.graph()), &mut io::stdout()).unwrap();
                             } else {
