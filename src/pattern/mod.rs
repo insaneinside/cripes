@@ -12,7 +12,7 @@
 //! whether this type will be useful.)
 //!
 //!
-//! 
+//!
 //! This module provides two distinct ways to represent a pattern:
 //!
 //!   * [`Tagged<Element<T>>`](enum.Element.html) contains pattern elements
@@ -22,7 +22,7 @@
 //!
 
 //! A tagged-element instance can be converted to a `GraphRepr` using `.into()`.
-//! 
+//!
 
 use std::ops::{BitXor, Deref, DerefMut, Range};
 use std::iter::{FromIterator,IntoIterator};
@@ -99,6 +99,9 @@ pub type Pattern<T> = Element<T>;
 /// Description of a potential transition between parser states _due to .
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Transition<T: Atom> {
+    /// Any single atom.
+    Wildcard,
+
     /// atomic literal value
     Atom(T),
 
@@ -113,9 +116,6 @@ pub enum Transition<T: Atom> {
     /// `Class` is the atom-level equivalent of `Structure::Union`, which matches any one
     /// of a set of arbitrary transitions.
     Class(Class<T>),
-
-    /// Any single atom.
-    Wildcard,
 
     /// Condition that must match the current input for pattern-matching to
     /// continue
@@ -328,10 +328,10 @@ impl<T: Atom> ClassMember<T> {
         }
     }
 
-    
+
 }
 
-    
+
 impl<T: Atom> Debug for ClassMember<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -379,7 +379,7 @@ impl<T: Atom> Class<T> {
     /// Create a new Class instance with specified polarity and members taken
     /// from the given iterator.
     pub fn new<I,U>(p: Polarity, items: I) -> Self
-        where I: IntoIterator<Item=U>, 
+        where I: IntoIterator<Item=U>,
               ClassMember<T>: From<U> {
         Class{polarity: p, members: Vec::from_iter(items.into_iter().map(|x| x.into()))}
     }
@@ -518,7 +518,7 @@ impl<T: Clone + Debug> DerefMut for Tagged<T> {
         &mut self.value
     }
 }
-    
+
 impl<T: Clone + Debug> From<T> for Tagged<T> {
     fn from(thing: T) -> Self {
         Tagged::new(thing)
@@ -604,7 +604,6 @@ pub enum Element<T: Atom> {
     ///
     /// See `Transition::Literal` for the atom-only equivalent.
     Sequence(Vec<Element<T>>),
-    //Sequence(Vec<Tagged<Element<T>>>),
 
     /// Alternation (union) of elements.
     ///
@@ -774,5 +773,3 @@ impl From<Expr> for Structure<char> {
         }
     }
 }*/
-
-
