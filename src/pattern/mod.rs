@@ -124,14 +124,14 @@ pub enum Transition<T: Atom> {
 
 impl<T: Atom> Transition<T> {
     /// Convert the transition to a different atom type.
-    pub fn map<U, F>(self, f: F) -> Transition<U>
+    pub fn map_atoms<U, F>(self, f: F) -> Transition<U>
         where F: Fn(T) -> U,
               U: Atom
     {
         match self {
             Transition::Atom(a) => Transition::Atom(f(a)),
             Transition::Literal(v) => Transition::Literal(v.into_iter().map(f).collect()),
-            Transition::Class(c) => Transition::Class(c.map(f)),
+            Transition::Class(c) => Transition::Class(c.map_atoms(f)),
             Transition::Wildcard => Transition::Wildcard,
             Transition::Anchor(a) => Transition::Anchor(a)
         }
@@ -301,7 +301,7 @@ impl<T: Atom> Copy for ClassMember<T> {}
 
 impl<T: Atom> ClassMember<T> {
     /// Map the class-member's atoms to a different type
-    pub fn map<U, F>(self, f: F) -> ClassMember<U>
+    pub fn map_atoms<U, F>(self, f: F) -> ClassMember<U>
         where F: Fn(T) -> U,
               U: Atom
     {
@@ -385,11 +385,11 @@ impl<T: Atom> Class<T> {
     }
 
     /// Map the atoms in the class to a different atom type.
-    pub fn map<U, F>(self, f: F) -> Class<U>
+    pub fn map_atoms<U, F>(self, f: F) -> Class<U>
         where F: Fn(T) -> U,
               U: Atom
     {
-        Class::new(self.polarity, self.members.into_iter().map(|m| m.map(&f)))
+        Class::new(self.polarity, self.members.into_iter().map(|m| m.map_atoms(&f)))
     }
 
     /// Check whether the class would match a particular atom.
@@ -635,17 +635,18 @@ pub enum Element<T: Atom> {
 }
 
 impl<T: Atom> Element<T> {
-    /// Map the element to one of a different atom type.
-    pub fn map<U, F>(self, f: F) -> Element<U>
+    /// Transforms each contained atom using the supplied function or closure
+    /// to produce a new Element.
+    pub fn map_atoms<U, F>(self, f: F) -> Element<U>
         where F: Fn(T) -> U,
               U: Atom
     {
         match self {
-            Element::Atomic(a) => a.map(f).into(),
-            Element::Sequence(v) => Element::Sequence(v.into_iter().map(|elt| elt.map(&f)).collect()),
-            Element::Union(v) => Element::Union(v.into_iter().map(|elt| elt.map(&f)).collect()),
-            Element::Repeat{element, count} => Element::Repeat{element: Box::new(element.map(f)), count: count},
-            Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map(f)), name: name},
+            Element::Atomic(a) => a.map_atoms(f).into(),
+            Element::Sequence(v) => Element::Sequence(v.into_iter().map(|elt| elt.map_atoms(&f)).collect()),
+            Element::Union(v) => Element::Union(v.into_iter().map(|elt| elt.map_atoms(&f)).collect()),
+            Element::Repeat{element, count} => Element::Repeat{element: Box::new(element.map_atoms(f)), count: count},
+            Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
         }
     }
 }
