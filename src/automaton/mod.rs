@@ -24,9 +24,8 @@ use pattern::{self, Action, Atom, Element, RepeatCount};
 use util::graph::interface::*;
 use util::graph::{self,Build, Builder, Target, WeightedNode};//, Graph as Graphlike, DirectedGraph, Id as GraphID};
 
-/// Trait bounds for any type used as a transition in an automaton
-pub trait Transition: Clone + Eq + Ord {}
-impl<T> Transition for T where T: Clone + Eq + Ord {}
+pub mod interface;
+use self::interface::{Automaton, DeterministicAutomaton, NondeterministicAutomaton};
 
 //pub mod analysis;
 //use self::analysis::{FlowStructure,NodeAnalysis};
@@ -102,59 +101,6 @@ impl Display for State {
 // ================================================================
 // Graphs
 
-/// Interface for automaton implementations
-pub trait Automaton<'a, T: 'a + Transition> {
-    /// Type used to identify individual states.
-    type StateId: Id;
-
-    /// Concrete type used to represent automaton states
-    type State;
-
-    /// Iterator over the IDs of states in the automaton.
-    type StateIdsIter: Iterator<Item=Self::StateId>;
-
-    /// Iterator over the possible inputs for a state.
-    type InputsIter: Iterator<Item=&'a T>;
-
-    /// Iterator over the possible outgoing transitions for a state.
-    type TransitionsIter: Iterator<Item=(&'a T, Self::StateId)>;
-
-    /// Get the number of states in the automaton.
-    fn state_count(&self) -> usize;
-
-    /// Get an iterator over the IDs of all states in the automaton.
-    fn state_ids(&self) -> Self::StateIdsIter;
-
-    /// Get the ID of the automaton's initial state.
-    fn initial_state(&self) -> Self::StateId;
-
-    /// Get a reference to a specific state.
-    fn state(&self, s: Self::StateId) -> &Self::State;
-
-    /// Fetch an iterator over the valid inputs for a given state.
-    fn state_inputs(&'a self, s: Self::StateId) -> Self::InputsIter;
-
-    /// Fetch an iterator over the (transition, next state) pairs for
-    /// a given state.
-    fn state_transitions(&'a self, s: Self::StateId) -> Self::TransitionsIter;
-}
-
-/// Interface for deterministic automatons.
-pub trait DeterministicAutomaton<'a, T: 'a + Transition>: Automaton<'a, T> {
-    /// Determine the next state to which the DFA will transition given its
-    /// current state and the input token.
-    fn next_state(&self, current_state: Self::StateId, input: T) -> Option<Self::StateId>;
-}
-
-/// Interface for non-deterministic automatons.
-pub trait NondeterministicAutomaton<'a,T: 'a + Transition>: Automaton<'a, T> {
-    /// Iterator type returned by `next_states`.
-    type NextStatesIter: Iterator<Item=Self::StateId>;
-
-    /// Fetch an iterator over the set of states to which the automaton
-    /// transitions on the given input.
-    fn next_states(&'a self, current_state: Self::StateId, input: T) -> Self::NextStatesIter;
-}
 
 /// Wrapped node index.
 type NodeId = graph::NodeIndex<u32>;
@@ -170,7 +116,7 @@ pub type GraphImpl<T> = graph::WeightedGraph<State,T>;
 
 /// Graph-based representation of automata patterns.
 #[derive(Clone)]
-struct GraphRepr<T: Transition> {
+struct GraphRepr<T: interface::Transition> {
     /// Graph representation of the control-flow of the pattern's automaton.
     graph: GraphImpl<T>,
 
@@ -186,13 +132,13 @@ struct GraphRepr<T: Transition> {
 
 
 /// Iterator over a state's inputs (outgoing-edge values)
-pub struct InputsIter<'a, T: 'a + Transition> {
+pub struct InputsIter<'a, T: 'a + interface::Transition> {
     graph: &'a GraphImpl<T>,
     edges: slice::Iter<'a,<GraphImpl<T> as Graph>::EdgeId>
 }
 
 impl<'a, T> Iterator for InputsIter<'a, T>
-    where T: 'a + Transition
+    where T: 'a + interface::Transition
 {
     type Item = &'a T;
 
@@ -205,15 +151,15 @@ impl<'a, T> Iterator for InputsIter<'a, T>
 }
 
 /// Iterator over a state's inputs and corresponding next-state IDs
-pub struct TransitionsIter<'a, T: 'a + Transition> {
+pub struct TransitionsIter<'a, T: 'a + interface::Transition> {
     graph: &'a GraphImpl<T>,
     edges: slice::Iter<'a,<GraphImpl<T> as Graph>::EdgeId>
 }
 
 impl<'a, T> Iterator for TransitionsIter<'a, T>
-    where T: 'a + Transition
+    where T: 'a + interface::Transition
 {
-    type Item = (&'a T, <NFA<T> as Automaton<'a,T>>::StateId);
+    type Item = (&'a T, <NFA<T::Atom> as Automaton<'a,T::Atom>>::StateId);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.edges.next() {
@@ -227,16 +173,16 @@ impl<'a, T> Iterator for TransitionsIter<'a, T>
 
 /// Iterator over the IDs of states reachable from specific
 /// state-and-input pair.
-pub struct NextStatesIter<'a, T: 'a + Transition> {
+pub struct NextStatesIter<'a, T: 'a + interface::Transition> {
     graph: &'a GraphImpl<T>,
     edges: slice::Iter<'a,<GraphImpl<T> as Graph>::EdgeId>,
     transition: T
 }
 
 impl<'a, T> Iterator for NextStatesIter<'a, T>
-    where T: 'a + Transition
+    where T: 'a + interface::Transition
 {
-    type Item = <NFA<T> as Automaton<'a,T>>::StateId;
+    type Item = <NFA<T::Atom> as Automaton<'a,T::Atom>>::StateId;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -250,15 +196,15 @@ impl<'a, T> Iterator for NextStatesIter<'a, T>
 }
 
 /// Iterator over the IDs of states in an automaton.
-pub struct StateIdsIter<'a,T: 'a + Transition> {
+pub struct StateIdsIter<'a,A: 'a + Atom> {
     range: Range<usize>,
-    id: PhantomData<&'a <NFA<T> as Automaton<'a,T>>::StateId>
+    id: PhantomData<&'a <NFA<A> as Automaton<'a,A>>::StateId>
 }
 
-impl<'a, T> Iterator for StateIdsIter<'a,T>
-    where T: 'a + Transition
+impl<'a, A> Iterator for StateIdsIter<'a,A>
+    where A: 'a + Atom
 {
-    type Item = <NFA<T> as Automaton<'a,T>>::StateId;
+    type Item = <NFA<A> as Automaton<'a,A>>::StateId;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.range.next().map(|x| x.into())
@@ -271,13 +217,14 @@ impl<'a, T> Iterator for StateIdsIter<'a,T>
 
 
 macro_rules! impl_automaton {
-    ($Tp: ty, $N: ident, $T: ident) => {
-        impl<'a,$T: 'a + Transition> Automaton<'a,$T> for $Tp {
+    ($Ap: ty, $N: ident, $A: ident, $Tr: ty) => {
+        impl<'a,$A: 'a + Atom> Automaton<'a,$A> for $Ap {
+            type Transition = $Tr;
             type State = State;
-            type StateId = <GraphImpl<$T> as Graph>::NodeId;
-            type StateIdsIter = StateIdsIter<'a, T>;
-            type InputsIter = InputsIter<'a,$T>;
-            type TransitionsIter = TransitionsIter<'a,$T>;
+            type StateId = <GraphImpl<$A> as Graph>::NodeId;
+            type StateIdsIter = StateIdsIter<'a, $A>;
+            type InputsIter = InputsIter<'a,Self::Transition>;
+            type TransitionsIter = TransitionsIter<'a,Self::Transition>;
 
             #[inline]
             fn initial_state(&self) -> Self::StateId {
@@ -609,17 +556,17 @@ fn build_dfa_recursive<'a, D, T, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
 }
 
 
-impl_automaton!(DFA<T>, DFA, T);
+impl_automaton!(DFA<A>, DFA, A, Transition<A>);
 
-impl<'a, T> DeterministicAutomaton<'a,T> for DFA<T>
-    where T: 'a + Transition {
+impl<'a, A> DeterministicAutomaton<'a,A> for DFA<A>
+    where A: 'a + Atom {
     #[inline]
-    fn next_state(&self, s: Self::StateId, input: T) -> Option<Self::StateId> {
+    fn next_state(&self, s: Self::StateId, input: A) -> Option<Self::StateId> {
         // With an adjacency-list graph representation, the best we can do is
         // a binary search -- IF the lists are sorted, which they're not
         // for now.
         //
-        // FIXME: [optimize] replace linear with binary search
+        // FIXME: [optimize] replace linear with binary search?
         let g = self.graph();
         g.outgoing_edges(s)
             .find(|eid| *g[*eid] == input)
@@ -628,20 +575,20 @@ impl<'a, T> DeterministicAutomaton<'a,T> for DFA<T>
 }
 
 
-impl<'a, T> From<NFA<T>> for DFA<T>
-    where T: 'a + Transition + Display + Debug
+impl<'a, A> From<NFA<A>> for DFA<A>
+    where A: 'a + Atom + Display + Debug
 {
-    fn from(n: NFA<T>) -> Self {
+    fn from(n: NFA<A>) -> Self {
         // To use `build_dfa_recursive`, we need to pass in references to
         // existing values.
         let mut g = GraphImpl::new();
-        let mut states_map: HashMap<BitSet,<DFA<T> as Automaton<'a,T>>::StateId> =
+        let mut states_map: HashMap<BitSet,<DFA<A> as Automaton<'a,A>>::StateId> =
             HashMap::new();
         let mut nfa_states = BitSet::with_capacity(n.state_count());
         nfa_states.insert(n.initial_state().index());
 
         let entry =
-            build_dfa_recursive::<DFA<T>,_,_,_>(&n, &mut g, &nfa_states,
+            build_dfa_recursive::<DFA<A>,_,_,_>(&n, &mut g, &nfa_states,
                                                 &mut states_map);
 
         DFA(GraphRepr{graph: g, entry: entry})
