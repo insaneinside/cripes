@@ -698,3 +698,12 @@ impl<'a, A> From<NFA<A>> for DFA<A>
         DFA(GraphRepr{graph: g, entry: entry})
     }
 }
+
+impl<'a, A> From<Element<A>> for DFA<A>
+    where A: 'a + Atom + Debug
+{
+    #[inline]
+    fn from(elt: Element<A>) -> Self {
+        NFA::from(elt).into()
+    }
+}
