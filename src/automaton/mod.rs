@@ -601,11 +601,17 @@ fn build_dfa_recursive<'a, D, A, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
           G::NodeId: Into<D::StateId>,
           G::Edge: From<(usize, usize, D::Transition)>
 {
-    // if the provided set of NFA states isn't already in the states map, insert it and
+    // if the provided set of NFA states isn't already in the states map,
+    // insert it and copy actions/flags from the NFA states
     let dfa_state: D::StateId = *states_map.entry(nfa_states.clone()).or_insert_with(|| {
         let sid = g.add_node(State::new());
-        if nfa_states.iter().any(|ns| n.state(ns.into()).is_accept()) {
-            g.node_mut(sid).set_accept(true);
+        let dfa_state = g.node_mut(sid);
+        for ns in nfa_states.iter() {
+            let nfa_state = n.state(ns.into());
+            if nfa_state.is_accept() {
+                dfa_state.set_accept(true);
+            }
+            dfa_state.actions.extend_from_slice(&nfa_state.actions[..]);
         }
         sid.into()
     });
