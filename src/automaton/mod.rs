@@ -28,8 +28,6 @@ use util::graph::{self,Build, Builder, Target, WeightedNode};//, Graph as Graphl
 pub mod interface;
 use self::interface::{Automaton, DeterministicAutomaton, NondeterministicAutomaton};
 
-//pub mod analysis;
-//use self::analysis::{FlowStructure,NodeAnalysis};
 /// Possible transitions in the automaton types implemented in this module.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Transition<A: Atom> {
@@ -200,13 +198,6 @@ impl Display for State {
 // ================================================================
 // Graphs
 
-
-/// Wrapped node index.
-type NodeId = graph::NodeIndex<u32>;
-
-/// Wrapped edge index.
-type EdgeId = graph::EdgeIndex<u32>;
-
 /// Graph type used for patterns.
 pub type GraphImpl<T> = graph::WeightedGraph<State,T>;
 
@@ -328,7 +319,7 @@ macro_rules! impl_automaton {
             #[inline]
             fn initial_state(&self) -> Self::StateId {
                 self.0.entry
-            }        
+            }
 
             #[inline]
             fn state_count(&self) -> usize {
