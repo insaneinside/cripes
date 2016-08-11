@@ -1,6 +1,6 @@
 //! Graph-based representations of finite automatons.
 //!
-//! [`GraphRepr<T>`](struct.GraphRepr.html) explicitly stores *FA
+//! [`GraphRepr<A>`](struct.GraphRepr.html) explicitly stores *FA
 //! transitions and states as edge and node weights, respectively, of
 //! a graph.  This type is best suited for code-generation and other
 //! read-only uses where you want to focus on specific parser states.
@@ -20,7 +20,8 @@ use bit_set::BitSet;
 #[cfg(feature="regex")]
 use regex_syntax;
 
-use pattern::{self, Action, Atom, Element, RepeatCount};
+use util::set::{self, Contains};
+use pattern::{Action, Atom, ByteOrChar, Class, Element, RepeatCount};
 use util::graph::interface::*;
 use util::graph::{self,Build, Builder, Target, WeightedNode};//, Graph as Graphlike, DirectedGraph, Id as GraphID};
 
@@ -29,6 +30,104 @@ use self::interface::{Automaton, DeterministicAutomaton, NondeterministicAutomat
 
 //pub mod analysis;
 //use self::analysis::{FlowStructure,NodeAnalysis};
+/// Possible transitions in the automaton types implemented in this module.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Transition<A: Atom> {
+    /// Transition on any input atom.
+    Any,
+
+    /// Transition on a specific atom.
+    Atom(A),
+
+    /// Transition on any one of a class of atoms.
+    Class(Class<A>)
+}
+
+impl<A: Atom> From<Element<A>> for Transition<A> {
+    fn from(elt: Element<A>) -> Self {
+        match elt {
+            Element::Wildcard => Transition::Any,
+            Element::Atom(a) => Transition::Atom(a),
+            Element::Class(a) => Transition::Class(a),
+            _ => panic!("Unexpected element type for conversion to NFA transition: {:?}", elt)
+        }
+    }
+}
+impl<A: Atom> set::IsSubsetOf<Transition<A>> for Transition<A> {
+    fn is_subset_of(&self, other: &Self) -> bool {
+        match self {
+            &Transition::Any => other == &Transition::Any,
+            &Transition::Atom(a) => match other {
+                &Transition::Any => true,
+                &Transition::Atom(b) => a == b,
+                &Transition::Class(ref c) => c.contains(&a) },
+            &Transition::Class(ref c) => match other {
+                &Transition::Any => true,
+                // A class CAN be a subset of an atom -- if the atom is the
+                // only member of the class!  (Proper subset is a different
+                // story, of course.)
+                &Transition::Atom(a) => c.len() == 1 && c.contains(&a),
+                &Transition::Class(ref d) => c.is_subset_of(d) },
+        }
+    }
+}
+
+impl<A: Atom> set::Contains<A> for Transition<A> {
+    fn contains(&self, atom: &A) -> bool {
+        match self {
+            &Transition::Any => true,
+            &Transition::Atom(a) => *atom == a,
+            &Transition::Class(ref c) => c.contains(atom),
+        }
+    }
+}
+
+impl<A: Atom> interface::Transition for Transition<A> {
+    type Atom = A;
+}
+
+impl Display for Transition<char> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Transition::Atom(ref x) => {
+                if x.is_whitespace() || x.is_control() {
+                    write!(f, "'{}'", x.escape_default().collect::<String>()) }
+                else { write!(f, "{:?}", x) } },
+            Transition::Any => f.write_str("(any)"),
+            _ => <Self as Debug>::fmt(self, f)
+        }
+
+    }
+}
+
+impl Display for Transition<ByteOrChar> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Transition::Atom(c) => {
+                match c {
+                    ByteOrChar::Byte(b) => Display::fmt(&Transition::Atom(b), f),
+                    ByteOrChar::Char(c) => Display::fmt(&Transition::Atom(c), f)
+                } },
+            Transition::Any => f.write_str("(any)"),
+            _ => <Self as Debug>::fmt(self, f)
+        }
+    }
+}
+
+impl Display for Transition<u8> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Transition::Atom(ref c) => {
+                let x = *c as char;
+                if x.is_whitespace() || x.is_control() {
+                    write!(f, "'{}'", x.escape_default().collect::<String>()) }
+                else { write!(f, "{:?}", x) } },
+            Transition::Any => f.write_str("(any)"),
+            _ => <Self as Debug>::fmt(self, f)
+        }
+
+    }
+}
 
 
 bitflags! {
@@ -71,7 +170,7 @@ impl State {
         if accept { self.flags.insert(STATE_ACCEPT); }
         else { self.flags.remove(STATE_ACCEPT); }
     }
-            
+
 
     /// Check if this is an entry state
     pub fn is_entry(&self) -> bool {
@@ -176,7 +275,7 @@ impl<'a, T> Iterator for TransitionsIter<'a, T>
 pub struct NextStatesIter<'a, T: 'a + interface::Transition> {
     graph: &'a GraphImpl<T>,
     edges: slice::Iter<'a,<GraphImpl<T> as Graph>::EdgeId>,
-    transition: T
+    input: T::Atom
 }
 
 impl<'a, T> Iterator for NextStatesIter<'a, T>
@@ -187,7 +286,7 @@ impl<'a, T> Iterator for NextStatesIter<'a, T>
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.edges.next() {
-                Some(eid) if *self.graph[*eid] == self.transition => return Some(self.graph.edge_target(*eid)),
+                Some(eid) if (*self.graph[*eid]).contains(&self.input) => return Some(self.graph.edge_target(*eid)),
                 Some(_) => continue,
                 None => return None
             }
@@ -259,16 +358,16 @@ macro_rules! impl_automaton {
     }
 }
 macro_rules! impl_nondeterministic_automaton {
-    ($Tp: ty, $N: ident, $T: ident) => {
-        impl<'a,$T: 'a + Transition> NondeterministicAutomaton<'a,$T> for $Tp {
-            type NextStatesIter = NextStatesIter<'a,$T>;
+    ($Tp: ty, $N: ident, $A: ident) => {
+        impl<'a,$A: 'a + Atom> NondeterministicAutomaton<'a,$A> for $Tp {
+            type NextStatesIter = NextStatesIter<'a, Self::Transition>;
             #[inline]
-            fn next_states(&'a self, state: Self::StateId, input: $T) -> Self::NextStatesIter {
-                NextStatesIter{graph: &self.0.graph, edges: self.0.graph.outgoing_edges(state), transition: input}
+            fn next_states(&'a self, state: Self::StateId, input: $A) -> Self::NextStatesIter {
+                NextStatesIter{graph: &self.0.graph, edges: self.0.graph.outgoing_edges(state), input: input}
             }
         }
 
-        impl<A: Atom> From<Element<A>> for $N<pattern::Transition<A>> {
+        impl<A: Atom> From<Element<A>> for $N<A> {
             fn from(elt: Element<A>) -> Self {
                 let (g, e) = GraphRepr::build(elt);
                 $N(GraphRepr{graph: g, entry: e})
@@ -276,25 +375,29 @@ macro_rules! impl_nondeterministic_automaton {
         }
 
         #[cfg(feature="regex")]
-        impl From<regex_syntax::Expr> for $N<pattern::Transition<char>> {
+        impl<A: Atom> From<regex_syntax::Expr> for $N<A>
+            where $N<A>: From<Element<A>>,
+                  Element<A>: From<regex_syntax::Expr>
+        {
             fn from(e: regex_syntax::Expr) -> Self { <Self as From<Element<_>>>::from(e.into()) }
         }
     }
 }
 
 
-/// Here we implement `graph::transform::Build` for a `GraphRepr` that uses 
-impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Transition<A>> {
-    type Input = Element<A>;
+/// Here we implement `graph::transform::Build` for a `GraphRepr` that uses
+impl<T> Build<GraphImpl<T>> for GraphRepr<T>
+    where T: interface::Transition + From<Element<<T as interface::Transition>::Atom>> {
+    type Input = Element<T::Atom>;
 
-    fn entry_node(g: &mut GraphImpl<pattern::Transition<A>>, _: &Self::Input)  -> <GraphImpl<pattern::Transition<A>> as Graph>::NodeId {
+    fn entry_node(g: &mut GraphImpl<T>, _: &Self::Input)  -> <GraphImpl<T> as Graph>::NodeId {
         g.add_node(State::new())
     }
-    fn target_node<E>(g: &mut GraphImpl<pattern::Transition<A>>, _: &E) -> <GraphImpl<pattern::Transition<A>> as Graph>::NodeId {
+    fn target_node<E>(g: &mut GraphImpl<T>, _: &E) -> <GraphImpl<T> as Graph>::NodeId {
         g.add_node(State::new())
     }
 
-    fn finish(b: &mut Builder<GraphImpl<pattern::Transition<A>>>) {
+    fn finish(b: &mut Builder<GraphImpl<T>>) {
         b.with_graph_mut(|b, mut g| {
             for id in b.stage_outputs().iter() {
                 g[*id].set_accept(true);
@@ -302,9 +405,9 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
         });
     }
 
-    fn build_recursive(b: &mut Builder<GraphImpl<pattern::Transition<A>>>,
-                       next: Target<<GraphImpl<pattern::Transition<A>> as Graph>::NodeId>,
-                       input: Self::Input) -> <GraphImpl<pattern::Transition<A>> as Graph>::NodeId {
+    fn build_recursive(b: &mut Builder<GraphImpl<T>>,
+                       next: Target<<GraphImpl<T> as Graph>::NodeId>,
+                       input: Self::Input) -> <GraphImpl<T> as Graph>::NodeId {
         #[cfg(feature="debug")] {
             let input_fmt = format!("{:?}", input);
             write!(io::stderr(), concat!("[32mBefore[0m [1;97m{}[0m\n",
@@ -313,8 +416,9 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
                                          "  outputs: {:?}\n"),
                    input_fmt, next, b.inputs, b.outputs).unwrap();
         }
-        
+
         let o = match input {
+            Element::Anchor(_) => unimplemented!(),
             Element::Tagged{element, name} => {
                 b.with_graph_mut(|b, mut g| {
                     for id in b.stage_inputs().iter() {
@@ -332,8 +436,10 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
                 o
             },
 
-            Element::Atomic(transition)
-                => b.append_edge(next, transition, Self::target_node),
+            Element::Wildcard |
+            Element::Atom(_) |
+            Element::Class(_)
+                => b.append_edge(next, input.into(), Self::target_node),
             Element::Sequence(elts)
                 => b.chain(next, elts.iter().map(|x| x.clone().into()), &Self::build_recursive),
             Element::Union(elts)
@@ -417,7 +523,7 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
                     => b.recurse(next, *element, |b, tgt, input| {
                         let mut intermediates = Vec::from(b.stage_inputs());
 
-                        let mut o = <GraphImpl<pattern::Transition<A>> as Graph>::NodeId::new(13);
+                        let mut o = <GraphImpl<T> as Graph>::NodeId::new(13);
                         for _ in 0..n {
                             o = Self::build_recursive(b, tgt, input.clone());
                             intermediates.push(o);
@@ -450,7 +556,7 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
                                      "   inputs: {:?}\n",
                                      "  outputs: {:?}\n\n"),
                input_fmt, b.inputs, b.outputs).unwrap();
-        
+
         o
     }
 }
@@ -459,14 +565,14 @@ impl<A: Atom> Build<GraphImpl<pattern::Transition<A>>> for GraphRepr<pattern::Tr
 ///
 /// NFAs are the result of transforming
 /// a [`Pattern`](../pattern/type.Pattern.html) into a graph.
-pub struct NFA<T: Transition>(GraphRepr<T>);
-impl_automaton!(NFA<T>, NFA, T);
-impl_nondeterministic_automaton!(NFA<T>, NFA, T);
+pub struct NFA<A: Atom>(GraphRepr<Transition<A>>);
+impl_automaton!(NFA<A>, NFA, A, Transition<A>);
+impl_nondeterministic_automaton!(NFA<A>, NFA, A);
 
-impl<T: Transition> NFA<T> {
+impl<A: Atom> NFA<A> {
     /// Fetch a reference to the graph used to represent the NFA.
     #[inline]
-    pub fn graph(&self) -> &GraphImpl<T> {
+    pub fn graph(&self) -> &GraphImpl<Transition<A>> {
         &self.0.graph
     }
 }
@@ -474,12 +580,12 @@ impl<T: Transition> NFA<T> {
 // ----------------------------------------------------------------
 
 /// Graph-based deterministic finite automaton.
-pub struct DFA<T: Transition>(GraphRepr<T>);
+pub struct DFA<A: Atom>(GraphRepr<Transition<A>>);
 
-impl<T: Transition> DFA<T> {
+impl<A: Atom> DFA<A> {
     /// Fetch a reference to the graph used to represent the NFA.
     #[inline]
-    pub fn graph(&self) -> &GraphImpl<T> {
+    pub fn graph(&self) -> &GraphImpl<Transition<A>> {
         &self.0.graph
     }
 }
@@ -492,18 +598,19 @@ impl<T: Transition> DFA<T> {
 /// This implementation avoids the necessity of manually tracking "unmarked"
 /// (unhandled) states in the resulting DFA by eagerly recursing whenever it
 /// finds a set of NFA states _not_ already present as a key in the mapping.
-fn build_dfa_recursive<'a, D, T, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
+fn build_dfa_recursive<'a, D, A, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
                                        states_map: &mut HashMap<BitSet, D::StateId>)
                                        -> D::StateId
-    where T: 'a + Transition + Display + Debug,
-          N: NondeterministicAutomaton<'a, T, State=State>,
-          D: Automaton<'a, T>,
+    where A: 'a + Atom + Debug,
+          N: NondeterministicAutomaton<'a, A, State=State>,
+          D: Automaton<'a, A>,
+          N::Transition: Into<D::Transition>,
           G: Graph + ConcreteGraph<Node=WeightedNode<State,<G as Graph>::EdgeId>>,
           G::Node: From<State>,
           G::NodeId: Into<D::StateId>,
-          G::Edge: From<(usize, usize, T)>
+          G::Edge: From<(usize, usize, D::Transition)>
 {
-    // if the provided set of NFA states isn't already in the states map, insert it and 
+    // if the provided set of NFA states isn't already in the states map, insert it and
     let dfa_state: D::StateId = *states_map.entry(nfa_states.clone()).or_insert_with(|| {
         let sid = g.add_node(State::new());
         if nfa_states.iter().any(|ns| n.state(ns.into()).is_accept()) {
@@ -541,7 +648,7 @@ fn build_dfa_recursive<'a, D, T, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
         // doesn't exist.
         let target_dfa_state: D::StateId =
             if ! states_map.contains_key(&target_nfa_states) {
-                let sid = build_dfa_recursive::<D, T, N, G>(n, g, &target_nfa_states, states_map);
+                let sid = build_dfa_recursive::<D, A, N, G>(n, g, &target_nfa_states, states_map);
                 states_map.insert(target_nfa_states.clone(), sid);
                 sid
             } else {
@@ -549,7 +656,7 @@ fn build_dfa_recursive<'a, D, T, N, G>(n: &'a N, g: &mut G, nfa_states: &BitSet,
             };
 
         // Add the edge that corresponds to this input.
-        g.add_edge((dfa_state.index(), target_dfa_state.index(), input.clone()));
+        g.add_edge((dfa_state.index(), target_dfa_state.index(), input.clone().into()));
     }
 
     dfa_state
@@ -569,14 +676,14 @@ impl<'a, A> DeterministicAutomaton<'a,A> for DFA<A>
         // FIXME: [optimize] replace linear with binary search?
         let g = self.graph();
         g.outgoing_edges(s)
-            .find(|eid| *g[*eid] == input)
+            .find(|eid| (*g[*eid]).contains(&input))
             .map(|eid| g.edge_target(*eid))
     }
 }
 
 
 impl<'a, A> From<NFA<A>> for DFA<A>
-    where A: 'a + Atom + Display + Debug
+    where A: 'a + Atom + Debug
 {
     fn from(n: NFA<A>) -> Self {
         // To use `build_dfa_recursive`, we need to pass in references to

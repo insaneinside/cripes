@@ -23,6 +23,7 @@ macro_rules! panic_unless {
 }
 
 
+pub mod set;
 pub mod hash;
 pub mod flex_box;
 pub mod graph;

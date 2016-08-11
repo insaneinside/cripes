@@ -1,8 +1,10 @@
+#![feature(try_from)]
 extern crate dot;
 extern crate cripes;
 extern crate itertools;
 extern crate regex_syntax;
 
+use std::convert::TryFrom;
 use std::fmt::Display;
 use std::io::{self, Write};
 
@@ -65,24 +67,30 @@ fn main() {
 
     let mut have_args = false;
     let mut nfa_only = false;
+    let mut dump_structure = false;
 
     while let Some(arg) = args.next() {
         have_args = true;
         match arg.as_str() {
+            "-s" => dump_structure = true,
             "-n" => nfa_only = true,
             "-d" => nfa_only = false,
             s => {
                 match regex_syntax::Expr::parse(s) {
-                    Ok(expr)
-                        => {
-                            let nfa = NFA::from(Element::<ByteOrChar>::from(expr));
-                            if nfa_only {
-                                dot::render(&G(nfa.graph()), &mut io::stdout()).unwrap();
+                    Ok(expr) => match Element::<ByteOrChar>::try_from(expr) {
+                        Ok(structural_pattern) => {
+                            if dump_structure {
+                                println!("Pattern: {:?}", structural_pattern);
                             } else {
-                                let dfa = DFA::from(nfa);
-                                dot::render(&G(dfa.graph()), &mut io::stdout()).unwrap();
-                            }
-                        },
+                                let nfa = NFA::from(structural_pattern);
+                                if nfa_only {
+                                    dot::render(&G(nfa.graph()), &mut io::stdout()).unwrap();
+                                } else {
+                                    let dfa = DFA::from(nfa);
+                                    dot::render(&G(dfa.graph()), &mut io::stdout()).unwrap();
+                                }
+                            } },
+                        Err(err) => {writeln!(io::stderr(), "{}", err).unwrap(); } },
                     Err(err)
                         => {writeln!(io::stderr(), "{}", err).unwrap(); },
                 }
