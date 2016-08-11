@@ -49,10 +49,8 @@
 //! ## Complete Example
 //!
 //! ```rust
-//! #![feature(hash)]
 //! use std::cmp::{Eq,PartialEq};
-//! use std::hash::{Hash,Hasher,SipHasher};
-//! use std::collections::HashSet;
+//! use std::hash::{Hasher, SipHasher};
 //!
 //! use cripes::util::hash::{stdhash,hash,Hashable};
 //!
