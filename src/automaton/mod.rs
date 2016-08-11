@@ -399,8 +399,8 @@ impl<T> Build<GraphImpl<T>> for GraphRepr<T>
     fn build_recursive(b: &mut Builder<GraphImpl<T>>,
                        next: Target<<GraphImpl<T> as Graph>::NodeId>,
                        input: Self::Input) -> <GraphImpl<T> as Graph>::NodeId {
+        #[cfg(feature="debug")] let input_fmt = format!("{:?}", input);
         #[cfg(feature="debug")] {
-            let input_fmt = format!("{:?}", input);
             write!(io::stderr(), concat!("[32mBefore[0m [1;97m{}[0m\n",
                                          "     next: {:?}\n",
                                          "   inputs: {:?}\n",
