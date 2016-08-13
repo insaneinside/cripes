@@ -82,6 +82,46 @@ pub use self::Element::Wildcard;
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 
+impl<T: Atom> set::IsSubsetOf<Class<T>> for T {
+    #[inline(always)]
+    fn is_subset_of(&self, class: &Class<T>) -> bool {
+        class.contains(*self)
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Union<T>> for T {
+    #[inline]
+    fn is_subset_of(&self, union: &Union<T>) -> bool {
+        union.iter().any(|m| self.is_subset_of(m))
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Repetition<T>> for T {
+    #[inline]
+    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
+        self.is_subset_of(rep.element()) && rep.count().contains(1)
+    }
+}
+
+
+impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
+    fn is_subset_of(&self, elt: &Element<T>) -> bool {
+        match elt {
+            &Element::Wildcard => true,
+            &Element::Atom(a) => *self == a,
+
+            &Element::Class(ref class) => self.is_subset_of(class),
+            &Element::Union(ref union) => self.is_subset_of(union),
+            &Element::Repeat(ref rep) => self.is_subset_of(rep),
+            &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
+
+            &Element::Sequence(_) |
+            &Element::Anchor(_)
+                => false,
+        }
+    }
+}
+
 
 /// Trait for types whose values can be stepped through by increment/decrement
 /// operatons
