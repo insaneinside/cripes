@@ -212,7 +212,7 @@ impl Step for char {
             if SURROGATE_RANGE.contains(o) {
                 o -= SURROGATE_RANGE.len() as u32;
             }
-            
+
             // We've manually skipped the surrogate range and done range
             // checking above, so this *should* actually be safe.
             unsafe { char::from_u32_unchecked(o) }
@@ -285,7 +285,7 @@ macro_rules! BoC_ascii_ext_forward {
         &ByteOrChar::Byte(b) => b.$name().$conv(),
         &ByteOrChar::Char(c) => c.$name().$conv()
     });
-}        
+}
 
 impl std::ascii::AsciiExt for ByteOrChar {
     type Owned = ByteOrChar;
@@ -602,7 +602,7 @@ macro_rules! element_is_subset_of_impl {
 
     };
 }
-element_is_subset_of_impl! { 
+element_is_subset_of_impl! {
     T, Repetition<T>, rep, self;
 
     &Element::Atom(_) |
@@ -619,7 +619,7 @@ element_is_subset_of_impl! {
     &Element::Atom(a) => union.contains(a),
     &Element::Wildcard => union.iter().any(|elt| Element::Wildcard.is_subset_of(elt))
 }
-                            
+
 
 
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
