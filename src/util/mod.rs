@@ -22,6 +22,24 @@ macro_rules! panic_unless {
     ($condition:expr, $($rest:expr),+) => ({ if ! $condition { panic!($($rest),+); } });
 }
 
+/// Panic with a given message unless an expression evaluates to true.
+#[macro_export]
+macro_rules! panic_unless_eq {
+    ($expected: expr, $actual: expr) => ({
+        match (&$expected, &$actual) {
+            (expected, actual) => if !(*actual == *expected) {
+                panic!("unexpected value: `{:?}`, expected `{:?}`", actual, expected)
+            }
+        }
+    });
+    ($expected: expr, $actual: expr, $($rest:expr),+) => ({
+        match (&$expected, &$actual) {
+            (expected, actual) => if !(*actual == *expected) {
+                panic!("{}: `{:?}`, expected `{:?}`", format_args!($($rest),+), actual, expected)
+            }
+        }
+    })
+}
 
 pub mod set;
 pub mod hash;
