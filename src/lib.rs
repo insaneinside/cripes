@@ -1,6 +1,9 @@
+//! Cripes: Grammar Manipulation Toolkit
+// Copyright (C) 2015-2016 Collin J. Sutton
 #![crate_type = "rlib"]
 #![crate_name = "cripes"]
 #![warn(missing_docs)]
+
 
 // These features (`alloc`, `heap_api`, `unsize`, `coerce_unsized`, and
 // `core_intrinsics`) are used in the implementation of
@@ -11,15 +14,21 @@
 #![feature(coerce_unsized)]
 #![feature(core_intrinsics)]
 
-// `range_contains` and `inclusive_range_syntax` are required in the `pattern`
-// module, where we use them for checking whether particular atoms are members
-// of a range in an atom class.
+// `range_contains`, `inclusive_range`, and `inclusive_range_syntax` are
+// required in the `pattern` module, where we use them for checking whether
+// particular atoms are members of a range in an atom class.
 #![feature(range_contains)]
+#![feature(inclusive_range)]
 #![feature(inclusive_range_syntax)]
 
 // `stmt_expr_attributes` is used to enable debug output crate-wide using crate
 // feature "debug".
 #![feature(stmt_expr_attributes)]
+
+// `iter_arith_traits` is used to implement `std::iter::Sum` on a type in
+// `pattern::codegen` that stores a predicted byte count or range of byte
+// counts needed to match a particular atom.
+#![feature(iter_arith_traits)]
 
 // `TryFrom` is used when converting `regex_syntax::Expr`s to structural
 // patterns, because there are some features of regex_syntax that we simply
@@ -48,3 +57,4 @@ pub mod util;
 pub mod symbol;
 pub mod pattern;
 pub mod automaton;
+//pub mod grammar;

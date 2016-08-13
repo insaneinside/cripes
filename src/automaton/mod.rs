@@ -58,23 +58,23 @@ impl<A: Atom> set::IsSubsetOf<Transition<A>> for Transition<A> {
             &Transition::Atom(a) => match other {
                 &Transition::Any => true,
                 &Transition::Atom(b) => a == b,
-                &Transition::Class(ref c) => c.contains(&a) },
+                &Transition::Class(ref c) => c.contains(a) },
             &Transition::Class(ref c) => match other {
                 &Transition::Any => true,
                 // A class CAN be a subset of an atom -- if the atom is the
                 // only member of the class!  (Proper subset is a different
                 // story, of course.)
-                &Transition::Atom(a) => c.len() == 1 && c.contains(&a),
+                &Transition::Atom(a) => c.len() == 1 && c.contains(a),
                 &Transition::Class(ref d) => c.is_subset_of(d) },
         }
     }
 }
 
 impl<A: Atom> set::Contains<A> for Transition<A> {
-    fn contains(&self, atom: &A) -> bool {
+    fn contains(&self, atom: A) -> bool {
         match self {
             &Transition::Any => true,
-            &Transition::Atom(a) => *atom == a,
+            &Transition::Atom(a) => atom == a,
             &Transition::Class(ref c) => c.contains(atom),
         }
     }
@@ -277,7 +277,7 @@ impl<'a, T> Iterator for NextStatesIter<'a, T>
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.edges.next() {
-                Some(eid) if (*self.graph[*eid]).contains(&self.input) => return Some(self.graph.edge_target(*eid)),
+                Some(eid) if (*self.graph[*eid]).contains(self.input) => return Some(self.graph.edge_target(*eid)),
                 Some(_) => continue,
                 None => return None
             }
@@ -436,109 +436,109 @@ impl<T> Build<GraphImpl<T>> for GraphRepr<T>
             Element::Union(elts)
                 => b.branch(next, elts.iter().map(|x| x.clone().into()), &Self::build_recursive),
 
-            Element::Repeat{element, count}
-            => match count {
-                RepeatCount::Any
-                    => {
-                        // Unbounded repetition; this is the famous
-                        // Kleene star.
+            Element::Repeat(repetition) => { match repetition.count() {
+                    RepeatCount::Any
+                        => {
+                            // Unbounded repetition; this is the famous
+                            // Kleene star.
 
-                        // As we'll see below, additional structure is required
-                        // when any of the inputs has outgoing transitions
-                        // to itself.
-                        let have_input_loops
-                            = {
-                                let g = b.graph();
+                            // As we'll see below, additional structure is required
+                            // when any of the inputs has outgoing transitions
+                            // to itself.
+                            let have_input_loops
+                                = {
+                                    let g = b.graph();
 
-                                b.stage_inputs().iter()
-                                    .flat_map(|id| iter::repeat(*id).zip(g.direct_successors(*id)))
-                                    .any(|(id, target_id)| id == target_id)
-                            };
+                                    b.stage_inputs().iter()
+                                        .flat_map(|id| iter::repeat(*id).zip(g.direct_successors(*id)))
+                                        .any(|(id, target_id)| id == target_id)
+                                };
 
-                        if have_input_loops {
-                            // If any input *already* has a transition that
-                            // targets itself, we need to
-                            //
-                            //   (1) mark all input nodes as outputs to handle
-                            //       the zero-occurrences case;
-                            b.mark_inputs_as_outputs();
+                            if have_input_loops {
+                                // If any input *already* has a transition that
+                                // targets itself, we need to
+                                //
+                                //   (1) mark all input nodes as outputs to handle
+                                //       the zero-occurrences case;
+                                b.mark_inputs_as_outputs();
 
-                            // [This recurse call prevents us from munging
-                            // a parent stage's inputs and outputs list when we
-                            // call `advance`.]
-                            b.recurse(next, (*element).clone(), |b, _, input| {
-                                //   (2) create to a new output node to "lock
-                                //       in" the element being repeated and
-                                //       prevent following e.g. a preceding
-                                //       unbounded repetition once we've
-                                //       started this one; and finally
-                                Self::build_recursive(b, Target::NewOutput, input.clone());
-                                b.advance();
-                                Self::build_recursive(b, Target::InputOutput, input)
-                            })
-                        } else {
-                            // Without input loops, we simply build the
-                            // repeated element as a transition back to the
-                            // starting point (this also has the effect of
-                            // marking all inputs as outputs).
-                            Self::build_recursive(b, Target::InputOutput, *element)
-                        } },
+                                // [This recurse call prevents us from munging
+                                // a parent stage's inputs and outputs list when we
+                                // call `advance`.]
+                                b.recurse(next, *repetition.into_inner().0, |b, _, input| {
+                                    //   (2) create to a new output node to "lock
+                                    //       in" the element being repeated and
+                                    //       prevent following e.g. a preceding
+                                    //       unbounded repetition once we've
+                                    //       started this one; and finally
+                                    Self::build_recursive(b, Target::NewOutput, input.clone());
+                                    b.advance();
+                                    Self::build_recursive(b, Target::InputOutput, input)
+                                })
+                            } else {
+                                // Without input loops, we simply build the
+                                // repeated element as a transition back to the
+                                // starting point (this also has the effect of
+                                // marking all inputs as outputs).
+                                Self::build_recursive(b, Target::InputOutput, *repetition.into_inner().0)
+                            } },
 
-                // When the number of repetitions is bounded on the lower end
-                // only, we first add the minimum number of occurrences
-                // in-line; e.g. for the regular expression /a{2,}/ we'd begin
-                // with the following:
-                //
-                //   (0)--"a"-->(1)--"a"-->(2)
-                //
-                // To handle the unbounded upper end, we simply add another
-                // transition from the terminal node back to itself:
-                //
-                //   (0)--"a"-->(1)--"a"-->((2))<-╮
-                //                          |     │
-                //                          ╰-"a"-╯
-                RepeatCount::AtLeast(n)
-                    => b.recurse(next, *element, |b, tgt, input| {
-                        b.chain(tgt, iter::repeat(input.clone()).take(n), &Self::build_recursive);
-                        b.advance();
-                        let o = Self::build_recursive(b, Target::InputOutput, input);
-                        b.mark_output(o);
-                        o
-                    }),
-
-                // When the repetition count is bounded at the upper end (let's
-                // call that limit N), we simply build the repeated element's
-                // subgraph N times in a chain, marking the chain's
-                // intermediary nodes as stage outputs .
-                RepeatCount::AtMost(n)
-                    => b.recurse(next, *element, |b, tgt, input| {
-                        let mut intermediates = Vec::from(b.stage_inputs());
-
-                        let mut o = <GraphImpl<T> as Graph>::NodeId::new(13);
-                        for _ in 0..n {
-                            o = Self::build_recursive(b, tgt, input.clone());
-                            intermediates.push(o);
+                    // When the number of repetitions is bounded on the lower end
+                    // only, we first add the minimum number of occurrences
+                    // in-line; e.g. for the regular expression /a{2,}/ we'd begin
+                    // with the following:
+                    //
+                    //   (0)--"a"-->(1)--"a"-->(2)
+                    //
+                    // To handle the unbounded upper end, we simply add another
+                    // transition from the terminal node back to itself:
+                    //
+                    //   (0)--"a"-->(1)--"a"-->((2))<-╮
+                    //                          |     │
+                    //                          ╰-"a"-╯
+                    RepeatCount::AtLeast(n)
+                        => b.recurse(next, *repetition.into_inner().0, |b, tgt, input| {
+                            b.chain(tgt, iter::repeat(input.clone()).take(n), &Self::build_recursive);
                             b.advance();
-                        }
-                        for id in intermediates { b.mark_output(id); }
-                        o
-                    }),
-                // Exact repetition is the simplest possible case: we just
-                // chain the repeated element together the specified number
-                // of times.
-                RepeatCount::Exact(n)
-                    => b.chain(next, iter::repeat(*element).take(n), &Self::build_recursive),
+                            let o = Self::build_recursive(b, Target::InputOutput, input);
+                            b.mark_output(o);
+                            o
+                        }),
 
-                // Ranges (where the minimum is greater than zero and the
-                // maximum is finite) are handled as exact repetitions followed
-                // by RepeatCount::At
-                RepeatCount::Between(n, m)
-                    => b.recurse(next, (*element).clone(), |b, tgt, input| {
-                        b.chain(tgt, iter::repeat(input).take(n), &Self::build_recursive);
-                        b.advance();
-                        b.recurse(tgt, Element::Repeat{element: element, count: RepeatCount::AtMost(m - n)}.into(),
-                                  &Self::build_recursive)
-                    })
+                    // When the repetition count is bounded at the upper end (let's
+                    // call that limit N), we simply build the repeated element's
+                    // subgraph N times in a chain, marking the chain's
+                    // intermediary nodes as stage outputs .
+                    RepeatCount::AtMost(n)
+                        => b.recurse(next, *repetition.into_inner().0, |b, tgt, input| {
+                            let mut intermediates = Vec::from(b.stage_inputs());
+
+                            let mut o = <GraphImpl<T> as Graph>::NodeId::new(13);
+                            for _ in 0..n {
+                                o = Self::build_recursive(b, tgt, input.clone());
+                                intermediates.push(o);
+                                b.advance();
+                            }
+                            for id in intermediates { b.mark_output(id); }
+                            o
+                        }),
+                    // Exact repetition is the simplest possible case: we just
+                    // chain the repeated element together the specified number
+                    // of times.
+                    RepeatCount::Exact(n)
+                        => b.chain(next, iter::repeat(*repetition.into_inner().0).take(n), &Self::build_recursive),
+
+                    // Ranges (where the minimum is greater than zero and the
+                    // maximum is finite) are handled as exact repetitions followed
+                    // by RepeatCount::At
+                    RepeatCount::Between(n, m)
+                        => b.recurse(next, repetition.element().clone(), |b, tgt, input| {
+                            b.chain(tgt, iter::repeat(input).take(n), &Self::build_recursive);
+                            b.advance();
+                            b.recurse(tgt, Element::Repeat(repetition.with_count(RepeatCount::AtMost(m - n))).into(),
+                                      &Self::build_recursive)
+                        })
+                }
             }
         };
 
@@ -673,7 +673,7 @@ impl<'a, A> DeterministicAutomaton<'a,A> for DFA<A>
         // FIXME: [optimize] replace linear with binary search?
         let g = self.graph();
         g.outgoing_edges(s)
-            .find(|eid| (*g[*eid]).contains(&input))
+            .find(|eid| (*g[*eid]).contains(input))
             .map(|eid| g.edge_target(*eid))
     }
 }

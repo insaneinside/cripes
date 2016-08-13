@@ -1,48 +1,100 @@
 //! Structural representations of regular patterns.
 //!
 //! Patterns are parameterized by the _kind_ of thing &mdash; bounded by the
-//! [`Atom`](trait.Atom.html) trait &mdash; those patterns describe; regular
-//! expressions, for example, are usually patterns of characters.  Like their
-//! real-world counterparts, `Atom`s are indivisible: they represent the
-//! smallest unit that will be analyzed by any algorithm.
+//! [`Atom`][atom] trait &mdash; those patterns describe; regular expressions,
+//! for example, are usually patterns of characters.  Like their real-world
+//! counterparts, `Atom`s are indivisible: they represent the smallest unit
+//! that will be analyzed by any algorithm.
 //!
-//! Up one level from `Atom` is the [`Transition`](enum.Transition.html) enum,
-//! which has variants for simple sequences and unions (classes) of atoms in
-//! addition to single-atom values.  (At the time of writing, is is unclear
-//! whether this type will be useful.)
+//! Alone, an atom matches only itself; the variants of the
+//! [`Element`][element] are what provides the capability to specify arbitrary
+//! regular patterns.  For more details about these variants, visit
+//! `Element`'s documentation.
 //!
+//! ## Semantics of Set Implementations
 //!
+//! Types in this module implement several traits from the [`set`
+//! module][set-module] like [IsSubsetOf][set-IsSubsetOf] and
+//! [Contains][set-Contains].  When using these traits, we view a pattern
+//! element as the *set of possible inputs* that would match that element; for
+//! example a wildcard is always a superset of an atom or atom class:
 //!
-//! This module provides two distinct ways to represent a pattern:
+//! ```rust
+//! # extern crate cripes;
+//! use std::iter::FromIterator;
+//! use cripes::pattern::*;
+//! use cripes::util::set::IsSubsetOf;
+//! # fn main() {
+//! assert!(Element::Atom('x').is_subset_of(&Element::Wildcard));
+//! assert!(Class::from_iter("xyz".chars()).is_subset_of(&Element::Wildcard));
+//! # }
+//! ```
 //!
-//!   * [`Tagged<Element<T>>`](enum.Element.html) contains pattern elements
-//!     as nested (and, as appropriate, boxed) fields.  This type is best for
-//!     when the pattern will be modified or you need high-level access to
-//!     its elements.
+//! It is not, however, a superset of any pattern of non-unit length:
 //!
+//! ```rust
+//! # extern crate cripes;
+//! use std::iter::FromIterator;
+//! use cripes::pattern::*;
+//! use cripes::util::set::{IsSubsetOf, IsSupersetOf};
+//! # fn main() {
+//! let union = Union::from_iter(["abc", "def", "ghi"].iter()
+//!                              .map(|s| Sequence::<char>::from_iter(s.chars())));
+//! let wild = Element::Wildcard;
+//!
+//! assert!(! union.is_subset_of(&wild));
+//! assert!(! wild.is_subset_of(&union));
+//! # }
+//! ```
+//!
+//! [atom]: trait.Atom.html
+//! [element]: enum.Element.html
+//! [set-module]: ../util/set/index.html
 
-//! A tagged-element instance can be converted to a `GraphRepr` using `.into()`.
-//!
-
-use std::ptr;
+use std;
+use std::{char, u8, u16, u32, u64, usize};
+use std::{ptr, cmp};
 use std::convert::{TryFrom, TryInto};
-use std::ops::{BitXor, Deref, DerefMut, Range, Sub};
+use std::ops::{Deref, DerefMut, Range};
 use std::iter::{FromIterator,IntoIterator};
 use std::fmt::{self,Display,Debug};
 
 #[cfg(feature="regex")]
-use regex_syntax::{self, Expr, Repeater};
+use regex_syntax::Expr;
 use arrayvec::ArrayVec;
-use itertools::Itertools;
 
 use util::set::{self, Contains};
 
+mod class;
+mod union;
+mod sequence;
+mod wildcard;
+mod repetition;
+
 pub mod codegen;
 
-/// Trait-bounds requirements for atomic values in a pattern.
-pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance{}
-impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance {}
+pub use self::class::*;
+pub use self::union::*;
+pub use self::sequence::*;
+pub use self::repetition::*;
+pub use self::wildcard::*;
 
+/// Trait-bounds requirements for atomic values in a pattern.
+pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
+impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
+
+
+/// Trait for types whose values can be stepped through by increment/decrement
+/// operatons
+pub trait Step: PartialEq<Self> {
+    ///  Fetch the next value after the one provided in the positive direction.
+    ///  If the supplied value is already at its maximum, return it.
+    fn increment(&self) -> Self;
+
+    ///  Fetch the next value after the one provided in the negative direction.
+    ///  If the supplied value is already at its minimum, return it.
+    fn decrement(&self) -> Self;
+}
 
 /// Trait used to determine the distance between two atoms.
 pub trait Distance {
@@ -50,18 +102,23 @@ pub trait Distance {
     /// the number of `Self`-sized steps between them.
     fn distance(&self, b: &Self) -> usize;
 }
-impl Distance for char {
-    fn distance(&self, b: &Self) -> usize {
-        if *self > *b { (*self as u32 - *b as u32) as usize }
-        else { (*b as u32 - *self as u32) as usize }
-    }
-}
-macro_rules! impl_distance_for_primitives {
-    ($first: ty, $($rest:ty),+) => (
-        impl_distance_for_primitives!($first);
-        impl_distance_for_primitives!($($rest),+);
+
+macro_rules! impl_for_primitives {
+    ($first: tt, $($rest:tt),+) => (
+        impl_for_primitives!($first);
+        impl_for_primitives!($($rest),+);
     );
-    ($tp: ty) => (
+    ($tp: tt) => (
+        impl Step for $tp {
+            fn increment(&self) -> Self {
+                if *self >= $tp::MAX { *self }
+                else { ((*self) + 1) as $tp }
+            }
+            fn decrement(&self) -> Self {
+                if *self == 0 { *self }
+                else { (*self - 1) as $tp }
+            }
+        }
         impl Distance for $tp {
             fn distance(&self, b: &Self) -> usize {
                 if *self > *b { (*self - *b) as usize }
@@ -71,7 +128,58 @@ macro_rules! impl_distance_for_primitives {
     );
 }
 
-impl_distance_for_primitives!(u8, u16, u32, u64, usize);
+impl_for_primitives!(u8, u16, u32, u64, usize);
+
+const SURROGATE_RANGE: Range<u32> = 0xD800..0xE000;
+
+impl Distance for char {
+    fn distance(&self, b: &Self) -> usize {
+        let (a, b) = (cmp::min(*self, *b) as u32, cmp::max(*self, *b) as u32);
+        let a_surrogate = SURROGATE_RANGE.contains(a);
+        let b_surrogate = SURROGATE_RANGE.contains(b);
+
+        if a_surrogate && b_surrogate { 0 }
+        else if a_surrogate { b as usize }
+        else if b_surrogate { a as usize }
+        else if (a < SURROGATE_RANGE.start && b < SURROGATE_RANGE.start) || (a >= SURROGATE_RANGE.end && b >= SURROGATE_RANGE.end) {
+            (b - a) as usize
+        } else {
+            (b - SURROGATE_RANGE.end + SURROGATE_RANGE.start - a) as usize
+        }
+    }
+}
+
+impl Step for char {
+    fn increment(&self) -> Self {
+        if *self >= char::MAX {
+            *self
+        } else {
+            let mut o = *self as u32 + 1;
+            if SURROGATE_RANGE.contains(o) {
+                o += SURROGATE_RANGE.len() as u32;
+            }
+
+            // We've manually skipped the surrogate range and done range
+            // checking above, so this *should* actually be safe.
+            unsafe { char::from_u32_unchecked(o) }
+        }
+    }
+
+    fn decrement(&self) -> Self {
+        if *self == '\0' {
+            *self
+        } else {
+            let mut o = *self as u32 - 1;
+            if SURROGATE_RANGE.contains(o) {
+                o -= SURROGATE_RANGE.len() as u32;
+            }
+            
+            // We've manually skipped the surrogate range and done range
+            // checking above, so this *should* actually be safe.
+            unsafe { char::from_u32_unchecked(o) }
+        }
+    }
+}
 
 
 /// Atom type for use with mixed binary/text data.
@@ -101,6 +209,21 @@ impl Distance for ByteOrChar {
     }
 }
 
+impl Step for ByteOrChar {
+    fn increment(&self) -> Self {
+        match self {
+            &ByteOrChar::Byte(b) => ByteOrChar::Byte(b.increment()),
+            &ByteOrChar::Char(c) => ByteOrChar::Char(c.increment()),
+        }
+    }
+    fn decrement(&self) -> Self {
+        match self {
+            &ByteOrChar::Byte(b) => ByteOrChar::Byte(b.increment()),
+            &ByteOrChar::Char(c) => ByteOrChar::Char(c.increment()),
+        }
+    }
+}
+
 impl Into<char> for ByteOrChar {
     fn into(self) -> char {
         match self {
@@ -110,6 +233,46 @@ impl Into<char> for ByteOrChar {
     }
 }
 
+macro_rules! BoC_ascii_ext_forward {
+    ($slf: ident, $name: ident) => (match $slf {
+        &ByteOrChar::Byte(b) => b.$name(),
+        &ByteOrChar::Char(c) => c.$name()
+    });
+    (mut $slf: ident, $name: ident) => (match *$slf {
+        ByteOrChar::Byte(ref mut b) => b.$name(),
+        ByteOrChar::Char(ref mut c) => c.$name()
+    });
+    ($slf: ident, $name: ident -> $conv: ident) => (match $slf {
+        &ByteOrChar::Byte(b) => b.$name().$conv(),
+        &ByteOrChar::Char(c) => c.$name().$conv()
+    });
+}        
+
+impl std::ascii::AsciiExt for ByteOrChar {
+    type Owned = ByteOrChar;
+    #[inline]
+    fn is_ascii(&self) -> bool { BoC_ascii_ext_forward!(self, is_ascii) }
+    #[inline]
+    fn to_ascii_uppercase(&self) -> Self::Owned { BoC_ascii_ext_forward!(self, to_ascii_uppercase -> into) }
+    #[inline]
+    fn to_ascii_lowercase(&self) -> Self::Owned { BoC_ascii_ext_forward!(self, to_ascii_uppercase -> into) }
+    #[inline]
+    fn make_ascii_uppercase(&mut self) { BoC_ascii_ext_forward!(mut self, make_ascii_uppercase) }
+    #[inline]
+    fn make_ascii_lowercase(&mut self) { BoC_ascii_ext_forward!(mut self, make_ascii_lowercase) }
+
+    #[inline]
+    fn eq_ignore_ascii_case(&self, other: &Self) -> bool {
+        match self {
+            &ByteOrChar::Byte(b1) => match other {
+                &ByteOrChar::Byte(b2) => b1.eq_ignore_ascii_case(&b2),
+                _ => false },
+            &ByteOrChar::Char(c1) => match other {
+                &ByteOrChar::Char(c2) => c1.eq_ignore_ascii_case(&c2),
+                _ => false }
+        }
+    }
+}
 
 /// An action to be performed immediately before or after any pattern element
 /// is consumed.
@@ -129,211 +292,6 @@ pub enum Action {
 
 /// Top-level pattern type
 pub type Pattern<T> = Element<T>;
-
-
-// ----------------------------------------------------------------
-// Class
-
-/// Any member of a class of atoms
-#[derive(Copy, Clone,PartialEq,PartialOrd, Eq, Ord)]
-pub enum ClassMember<T: Atom> {
-    /// A single atom
-    Atom(T),
-
-    /// A range of atoms
-    Range(T, T)
-}
-
-impl<T: Atom> ClassMember<T> {
-    /// Map the class-member's atoms to a different type
-    pub fn map_atoms<U, F>(self, f: F) -> ClassMember<U>
-        where F: Fn(T) -> U,
-              U: Atom
-    {
-        match self {
-            ClassMember::Atom(a) => ClassMember::Atom(f(a)),
-            ClassMember::Range(a, b) => ClassMember::Range(f(a), f(b))
-        }
-    }
-
-    /// Get the number of individual atoms that this class member represents.
-    pub fn len(&self) -> usize {
-        match self {
-            &ClassMember::Atom(_) => 1,
-            &ClassMember::Range(first, last) => last.distance(&first),
-        }
-    }
-}
-
-impl<T: Atom> set::Contains<T> for ClassMember<T> {
-    /// Check if the member is or contains a particular atom.
-    fn contains(&self, x: &T) -> bool {
-        match self {
-            &ClassMember::Atom(a) => a == *x,
-            &ClassMember::Range(a, b) => (a...b).contains(*x),
-        }
-    }
-}
-
-
-impl<T: Atom> Debug for ClassMember<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ClassMember::Atom(a) => write!(f, "{:?}", a),
-            ClassMember::Range(first, last) => write!(f, "{:?}-{:?}", first, last)
-        }
-    }
-}
-
-impl<T: Atom> From<T> for ClassMember<T> {
-    fn from(a: T) -> Self { ClassMember::Atom(a) }
-}
-
-impl From<regex_syntax::ClassRange> for ClassMember<ByteOrChar> {
-    fn from(cr: regex_syntax::ClassRange) -> Self {
-        ClassMember::Range(cr.start.into(), cr.end.into())
-    }
-}
-
-impl From<regex_syntax::ByteRange> for ClassMember<ByteOrChar> {
-    fn from(cr: regex_syntax::ByteRange) -> Self {
-        ClassMember::Range(cr.start.into(), cr.end.into())
-    }
-}
-
-
-impl From<regex_syntax::ClassRange> for ClassMember<char> {
-    fn from(cr: regex_syntax::ClassRange) -> Self {
-        ClassMember::Range(cr.start, cr.end)
-    }
-}
-
-
-impl From<regex_syntax::ByteRange> for ClassMember<u8> {
-    fn from(cr: regex_syntax::ByteRange) -> Self {
-        ClassMember::Range(cr.start, cr.end)
-    }
-}
-
-impl<T: Atom> From<Range<T>> for ClassMember<T>
-    where T: Sub<usize,Output=T> + Sub<T,Output=usize>
-{
-    fn from(r: Range<T>) -> Self {
-        if r.end - r.start > 1 { ClassMember::Range(r.start, r.end - 1usize) }
-        else { ClassMember::Atom(r.start) }
-    }
-}
-
-/// A set of atoms and/or ranges of atoms.
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Class<T: Atom> {
-    polarity: Polarity,
-    members: Vec<ClassMember<T>>
-}
-
-// FIXME: [optimize] All operations on a Class<T>, including observer and
-// predicate methods, currently require at least O(N) time.  We could probably
-// improve this by changing the storage representation.
-impl<T: Atom> Class<T> {
-    /// Create a new Class instance with specified polarity and members taken
-    /// from the given iterator.
-    pub fn new<I,U>(p: Polarity, items: I) -> Self
-        where I: IntoIterator<Item=U>,
-              ClassMember<T>: From<U> {
-        Class{polarity: p, members: Vec::from_iter(items.into_iter().map(|x| x.into()))}
-    }
-
-    /// Map the atoms in the class to a different atom type.
-    pub fn map_atoms<U, F>(self, f: F) -> Class<U>
-        where F: Fn(T) -> U,
-              U: Atom
-    {
-        Class::new(self.polarity, self.members.into_iter().map(|m| m.map_atoms(&f)))
-    }
-
-    /// Check whether the class would match a particular atom.
-    pub fn matches(&self, x: T) -> bool {
-        self.has_member(x).bitxor(self.polarity == Polarity::NORMAL)
-    }
-
-    /// Check whether a particular atom is a member of this class.
-    /// Unlike `matches`, this method does not take the class's polarity
-    /// into account.
-    pub fn has_member(&self, x: T) -> bool {
-        self.members.iter().any(|&range| range.contains(&x))
-    }
-
-    /// Get the number of members (atoms) in the class.
-    ///
-    /// Ranges of atoms count as the number of atoms in each range.
-    // FIXME: [bug] handle inverted polarity
-    pub fn len(&self) -> usize {
-        self.members.iter().map(|m| m.len()).sum()
-    }
-}
-
-impl<T: Atom> Debug for Class<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.polarity == Polarity::NORMAL {
-            write!(f, "[{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
-        } else {
-            write!(f, "[^{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
-        }
-    }
-}
-
-impl<T: Atom> set::Contains<T> for Class<T> {
-    fn contains(&self, x: &T) -> bool {
-        self.matches(*x)
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Class<T>> for Class<T> {
-    fn is_subset_of(&self, _: &Self) -> bool {
-        // FIXME [unimplemented] I suspect that we need some sort of
-        // specialized data structure or clever algorithm in order to perform
-        // this test in a time better than O(N·M).
-        panic!("`<Class as IsSubsetOf>::is_subset_of` is unimplemented")
-    }
-}
-
-
-impl<T: Atom, U> FromIterator<U> for Class<T>
-where ClassMember<T>: From<U> {
-    fn from_iter<I>(iter: I) -> Self
-        where I: IntoIterator<Item=U> {
-        Class{polarity: Polarity::NORMAL, members: Vec::from_iter(iter.into_iter().map(|x| x.into()))}
-    }
-}
-
-macro_rules! impl_class_from {
-    ($T: ty, $from: ty) => {
-        impl<'a> From<$from> for Class<$T> {
-            fn from(c: $from) -> Self {
-                Self::new(Polarity::NORMAL,
-                          c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
-                                            else { ClassMember::Atom(cr.start.into()) }))
-            }
-        }
-    };
-}
-
-impl_class_from!(char, regex_syntax::CharClass);
-impl_class_from!(u8, regex_syntax::ByteClass);
-impl_class_from!(ByteOrChar, regex_syntax::CharClass);
-impl_class_from!(ByteOrChar, regex_syntax::ByteClass);
-
-// ----------------------------------------------------------------
-
-/** Flag type used to differentiate between normal and inverting matches on
- * pattern elements. */
-#[derive(Debug,Copy,Clone,PartialEq, PartialOrd, Eq, Ord)]
-pub enum Polarity {
-    /// Normal match behavior.
-    NORMAL,
-    /// Invert the match result.
-    INVERTED
-}
 
 // ----------------------------------------------------------------
 // Anchor
@@ -410,68 +368,8 @@ impl<'a,T: Clone + Debug> From<&'a T> for Tagged<T> {
 
 // ----------------------------------------------------------------
 // Element
-/// Specification of the number of times a repeated element is to be repeated
-#[derive(Copy, Clone, PartialEq)]
-pub enum RepeatCount {
-    /// Element occurs as many times as it occurs (if it does indeed occur)
-    Any,
-
-    /// Element occurs *exactly* N times
-    Exact(usize),
-
-    /// Element occurs *at least* N times (N..)
-    AtLeast(usize),
-
-    /// Element occurs *at most* N times (..N)
-    AtMost(usize),
-
-    /// Element occurs between M and N times inclusive (M..(N + 1))
-    Between(usize, usize)
-}
-
-
-impl From<Repeater> for RepeatCount {
-    fn from(r: Repeater) -> Self {
-        match r {
-            Repeater::ZeroOrOne => RepeatCount::AtMost(1),
-            Repeater::ZeroOrMore => RepeatCount::Any,
-            Repeater::OneOrMore => RepeatCount::AtLeast(1),
-            Repeater::Range{min, max} => {
-                if min > 0 {
-                    if let Some(max) = max {
-                        if max != min { RepeatCount::Between(min as usize, max as usize) }
-                        else { RepeatCount::Exact(min as usize) }
-                    } else {
-                        RepeatCount::AtLeast(min as usize)
-                    }
-                } else if let Some(max) = max {
-                    RepeatCount::AtMost(max as usize)
-                } else {
-                    RepeatCount::Any
-                }
-            }
-        }
-    }
-}
-
-
-
-impl Debug for RepeatCount {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &RepeatCount::Any => write!(f, "any number of times"),
-            &RepeatCount::Exact(n) => write!(f, "{} {}", n, if n == 1 { "time" } else { "times" }),
-            &RepeatCount::AtLeast(n) => write!(f, "at least {} {}", n, if n == 1 { "time" } else { "times" }),
-            &RepeatCount::AtMost(n) => write!(f, "at most {} {}", n, if n == 1 { "time" } else { "times" }),
-            &RepeatCount::Between(m, n)=> write!(f, "{}-{} times", m, n)
-        }
-    }
-}
-
-
-
 /// High-level description of a matchable element in a pattern's structure
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum Element<T: Atom> {
     /// Any single atom.
     Wildcard,
@@ -487,22 +385,17 @@ pub enum Element<T: Atom> {
     Anchor(Anchor/*<T>*/),
 
     /// Sequence or concatenation of elements.
-    Sequence(Vec<Element<T>>),
+    Sequence(Sequence<T>),
 
     /// Alternation (union) of elements.
-    Union(Vec<Element<T>>),
+    Union(Union<T>),
 
     /// Repeated element.
     ///
     /// No provision is made for non-greedy repetition; instead we label
     /// defective those patterns for which it would be required.
-    Repeat {
-        /// Element being repeated
-        element: Box<Element<T>>,
+    Repeat(Repetition<T>),
 
-        /// Number of times the element should be repeated
-        count: RepeatCount
-    },
 
     /// Captured element
     Tagged {
@@ -618,64 +511,95 @@ impl<T: Atom> Element<T> {
             Element::Atom(a) => Element::Atom(f(a)),
             Element::Class(c) => Element::Class(c.map_atoms(f)),
             Element::Anchor(a) => Element::Anchor(a),
-            Element::Sequence(v) => Element::Sequence(v.into_iter().map(|elt| elt.map_atoms(&f)).collect()),
-            Element::Union(v) => Element::Union(v.into_iter().map(|elt| elt.map_atoms(&f)).collect()),
-            Element::Repeat{element, count} => Element::Repeat{element: Box::new(element.map_atoms(f)), count: count},
+            Element::Sequence(s) => Element::Sequence(s.map_atoms(f)),
+            Element::Union(u) => Element::Union(u.map_atoms(f)),
+            Element::Repeat(rep) => Element::Repeat(rep.map_atoms(f)),
             Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
         }
     }
 
-    /// Get the number of elements in a `Sequence` variant.
-    fn sequence_len(&self) -> Option<usize> {
-        match *self {
-            Element::Sequence(ref v) => Some(v.len()),
-            _ => None
-        }
-    }
-
-    /// Get the number of elements in a `Union` variant.
-    fn union_len(&self) -> Option<usize> {
-        match *self {
-            Element::Union(ref v) => Some(v.len()),
-            _ => None
-        }
-    }
-
-    /// Extract the inner vector of a `Sequence` or `Union` variant.
-    /// **Panics** if the element is *not* one of these variants.
-    fn into_vec(self) -> Vec<Element<T>> {
-        match self {
-            Element::Sequence(v) |
-            Element::Union(v)
-                => v,
-            _
-                => panic!("Cannot extract inner Vec from {:?}", self)
-        }
-    }
-
     /// "Reduce" the element in some implementation-defined way.  This method
-    /// is used for common-prefix extraction and flattening of
-    /// unnecessarily-nested pattern elements.
+    /// is used for common-prefix extraction, elimination of redundant
+    /// alternatives, and flattening of unnecessarily-nested pattern elements.
     pub fn reduce(&mut self) {
         match *self {
-            Element::Sequence(ref mut seq) => {
-                for elt in seq.iter_mut() {
-                    elt.reduce();
-                }
-                flatten_vec(seq, Self::sequence_len, Self::into_vec);
-            },
-            Element::Union(ref mut vec) => {
-                for elt in vec.iter_mut() {
-                    elt.reduce();
-                }
-                flatten_vec(vec, Self::union_len, Self::into_vec);
-
-                // Now build a trie for 
-
-            },
+            Element::Sequence(ref mut seq) => seq.reduce(),
+            Element::Union(ref mut union) => union.reduce(),
             _ => ()
         }
+    }
+}
 
+impl<T: Atom> set::Contains<T> for Element<T> {
+    fn contains(&self, atom: T) -> bool {
+        match self {
+            &Element::Wildcard => true,
+            &Element::Atom(a) => atom == a,
+            &Element::Class(ref c) => c.contains(atom),
+            &Element::Sequence(ref s) => s.contains(atom),
+            &Element::Union(ref u)  => u.contains(atom),
+            &Element::Repeat(ref r) => r.contains(atom),
+            &Element::Tagged{ref element, ..} => element.contains(atom),
+            &Element::Anchor(_) => false,
+        }
+    }
+}
+
+macro_rules! element_is_subset_of_impl {
+    ($T: ident, $Tp: ty, $name: ident, $s: ident; $($arms:tt)+) => {
+        impl<$T: Atom> set::IsSubsetOf<$Tp> for Element<$T> {
+            fn is_subset_of(&$s, $name: &$Tp) -> bool {
+                match $s {
+                    $($arms)+,
+                    &Element::Class(ref c) => c.is_subset_of($name),
+                    &Element::Sequence(ref s) => s.is_subset_of($name),
+                    &Element::Union(ref u) => u.is_subset_of($name),
+                    &Element::Tagged{ref element, ..} => element.is_subset_of($name),
+                    &Element::Repeat(ref r) => r.is_subset_of($name),
+                    &Element::Anchor(_) => false,
+                }
+            }
+        }
+
+    };
+}
+element_is_subset_of_impl! { 
+    T, Repetition<T>, rep, self;
+
+    &Element::Atom(_) |
+    &Element::Wildcard
+        => self.is_subset_of(rep.element()) && rep.count().contains(1)
+}
+element_is_subset_of_impl! {
+    T, Class<T>, class, self;
+    &Element::Atom(a) => class.contains(a),
+    &Element::Wildcard => false
+}
+element_is_subset_of_impl! {
+    T, Union<T>, union, self;
+    &Element::Atom(a) => union.contains(a),
+    &Element::Wildcard => union.iter().any(|elt| Element::Wildcard.is_subset_of(elt))
+}
+                            
+
+
+impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
+    fn is_subset_of(&self, other: &Element<T>) -> bool {
+        match self {
+            &Element::Wildcard => Wildcard.is_subset_of(other),
+            &Element::Atom(a) => match other {
+                &Element::Wildcard => true,
+                &Element::Atom(b) => a == b,
+                &Element::Class(ref c) => c.contains(a),
+                &Element::Repeat(ref r) => self.is_subset_of(r),
+                _ => false },
+            &Element::Class(ref c) => c.is_subset_of(other),
+            &Element::Sequence(ref s) => s.is_subset_of(other),
+            &Element::Union(ref u) => u.is_subset_of(other),
+            &Element::Repeat(ref rep) => (*rep).is_subset_of(other),
+            &Element::Tagged{ref element, ..} => element.is_subset_of(other),
+            &Element::Anchor(_) => false,
+        }
     }
 }
 
@@ -686,16 +610,6 @@ impl<T: Atom> From<T> for Element<T> {
     }
 }
 
-macro_rules! apply_attrs {
-    // Base cases
-    (($($attr: meta)+) => { $t: item }) => { $(#[$attr])+ $t };
-
-    ($(($($attr: meta)+) => { $t: item $($rest: item)* }),+) => {
-        $(apply_attrs!($($attr)+ => {$t});
-          $(apply_attrs!($($attr)+ => { $rest });)* )+
-    };
-
-}
 #[cfg(feature = "regex")]
 #[allow(missing_docs)]
 mod regex_conv {
@@ -741,7 +655,7 @@ macro_rules! element_from_expr_impl {
                                             Err(RegexConvErrorKind::UnsupportedFeature(Expr::Literal{chars: chars, casei: casei},
                                                                                        "case-insensitive matching".into()).into())
                                         } else if chars.len() > 1 {
-                                            Ok(Element::Sequence(chars.into_iter().map(|c| c.into()).collect()))
+                                            Ok(Sequence::from_iter(chars.into_iter().map(|c| c.into())).into())
                                         } else {
                                             Ok(Element::Atom(chars[0].into()))
                                         } },
@@ -763,7 +677,7 @@ macro_rules! element_from_expr_impl {
                                             Err(RegexConvErrorKind::UnsupportedFeature(Expr::LiteralBytes{bytes: bytes, casei: casei},
                                                                                        "case-insensitive matching".into()).into())
                                         } else if bytes.len() > 1 {
-                                            Ok(Element::Sequence(bytes.into_iter().map(|b| b.into()).collect()))
+                                            Ok(Element::Sequence(Sequence::from_iter(bytes.into_iter().map(|b| b.into()))))
                                         } else {
                                             Ok(Element::Atom(bytes[0].into()))
                                         } },
@@ -792,18 +706,18 @@ macro_rules! element_from_expr_impl {
                                                                                    "non-greedy repetition".into()).into())
                                     } else {
                                         match (*e).try_into() {
-                                            Ok(elt) => Ok(Element::Repeat{element: Box::new(elt), count: r.into()}),
+                                            Ok(elt) => Ok(Element::Repeat(Repetition::new(elt, r.into()))),
                                             Err(e) => Err(e)
                                         }
                                     } },
                                 Expr::Concat(exprs) => {
                                     match FromIterator::from_iter(exprs.into_iter().map(|e| e.try_into())) {
-                                        Ok(v) => Ok(Element::Sequence(v)),
+                                        Ok(v) => Ok(Element::Sequence(Sequence::new(v))),
                                         Err(e) => Err(e)
                                     } },
                                 Expr::Alternate(exprs) => {
                                     match FromIterator::from_iter(exprs.into_iter().map(|e| e.try_into())) {
-                                        Ok(v) => Ok(Element::Union(v)),
+                                        Ok(v) => Ok(Element::Union(Union::new(v))),
                                         Err(e) => Err(e)
                                     } },
                                 Expr::Empty => Err(RegexConvErrorKind::UnsupportedFeature(Expr::Empty, "empty expressions".into()).into()),
@@ -821,6 +735,7 @@ macro_rules! element_from_expr_impl {
 element_from_expr_impl!(char => (_char _common));
 element_from_expr_impl!(u8 => (_byte _common));
 element_from_expr_impl!(ByteOrChar => (_byte _char _common));
+
 macro_rules! element_from_atom_impl {
     ($A: ty => $T: ty) => {
         impl From<$A> for Element<$T> {
@@ -834,84 +749,28 @@ macro_rules! element_from_atom_impl {
 element_from_atom_impl!(u8 => ByteOrChar);
 element_from_atom_impl!(char => ByteOrChar);
 
-/*
-#[cfg(feature="regex")]
-impl From<Expr> for Tagged<Element<char>> {
-    fn from(expr: Expr) -> Self {
-        match expr {
-            Expr::Group{e, i, name} => {
-                if i.is_some() || name.is_some() {
-                    Tagged{value: (*e).into(),
-                           preactions: vec![Action::BeginSubmatch(i, name.clone())],
-                           postactions: vec![Action::EndSubmatch(i, name)]}
-                } else {
-                    Tagged{value: (*e).into(), preactions: Vec::new(), postactions: Vec::new()}
-                } },
-            _ => Tagged{value: expr.into(), preactions: Vec::new(), postactions: Vec::new()}
+
+macro_rules! element_from_variant_impl {
+    ($T: ident, $Ty: ty, $variant: ident) => {
+        impl<$T: Atom> From<$Ty> for Element<$T> {
+            fn from(val: $Ty) -> Self {
+                Element::$variant(val)
+            }
         }
-    }
-}*/
+    };
+}
+
+element_from_variant_impl!(T, Sequence<T>, Sequence);
+element_from_variant_impl!(T, Union<T>, Union);
+element_from_variant_impl!(T, Class<T>, Class);
+element_from_variant_impl!(T, Repetition<T>, Repeat);
 
 impl Display for Element<char> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Element::Repeat{ref element, count}
-            => write!(f, "{:?} ({:?})", element, count),
+        match self {
+            &Element::Repeat(ref repetition)
+                => Display::fmt(repetition, f),
             _ => <Self as Debug>::fmt(self, f)
         }
     }
 }
-
-
-// ----------------------------------------------------------------
-// Structure
-
-/*/// Structural representation of a pattern and its metadata.
-#[derive(Clone,Debug)]
-pub struct Structure<T: Atom> {
-    /// Pattern element associated with the structure
-    pub element: Element<T>,
-
-    /// Actions that should be executed before the structure's element is
-    /// processed
-    pub preactions: Vec<Action>,
-
-    /// Actions that should be executed after the structure's element is
-    /// processed
-    pub postactions: Vec<Action>
-}
-
-impl<T: Atom> Default for Structure<T> {
-    fn default() -> Self {
-        Structure{element: Element::Atomic(Transition::Wildcard),
-                  preactions: Vec::new(), postactions: Vec::new()}
-    }
-}
-
-impl<T: Atom> From<Element<T>> for Structure<T> {
-    fn from(elt: Element<T>) -> Self {
-        Structure{element: elt, preactions: Vec::new(), postactions: Vec::new()}//.. Default::default()}
-    }
-}
-
-impl<T: Atom> From<Transition<T>> for Structure<T> {
-    fn from(transition: Transition<T>) -> Self {
-        Structure{element: transition.into(), preactions: Vec::new(), postactions: Vec::new()}//.. Default::default()}
-    }
-}
-
-impl From<Expr> for Structure<char> {
-    fn from(expr: Expr) -> Self {
-        match expr {
-            Expr::Group{e, i, name} => {
-                if i.is_some() || name.is_some() {
-                    Structure{element: (*e).into(),
-                              preactions: vec![Action::BeginSubmatch(i, name.clone())],
-                              postactions: vec![Action::EndSubmatch(i, name)]}
-                } else {
-                    Structure{element: (*e).into(), .. Default::default()}
-                } },
-            _ => Structure{element: expr.into(), .. Default::default()}
-        }
-    }
-}*/
