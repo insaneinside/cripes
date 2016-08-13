@@ -1,12 +1,38 @@
 mod wildcard {
-    use cripes::pattern::{Class, Element, Polarity, Wildcard};
+    use std::{char, u8};
+    use std::iter::FromIterator;
+    use char_iter;
+    use cripes::pattern::{ByteOrChar, Class, Element, Wildcard};
     use cripes::util::set::{Contains, IsSubsetOf, IsSupersetOf};
 
     #[test]
     fn test_is_subset_of() {
-        assert!(Element::Wildcard.is_superset_of(&Element::Atom('a')));
-        assert!(!Element::Wildcard.is_subset_of(&Element::Atom('a')));
-        assert!(Wildcard.is_subset_of(&Element::Wildcard));
+        let wild = Wildcard::<char>;
+        assert!(wild.is_superset_of(&'a'));
+        assert!(wild.is_superset_of(&Element::Atom('a')));
+        assert!(!wild.is_subset_of(&Element::Atom('a')));
+        assert!(wild.is_subset_of(&Wildcard));
+
+        assert!(ByteOrChar::Byte(b'H').is_subset_of(&Wildcard));
+
+        let cls = Class::from_iter("xyz".chars());
+        assert!(wild.is_superset_of(&cls));
+    }
+
+    #[test]
+    fn test_contains() {
+        let wildc = Wildcard::<char>;
+        for c in char_iter::new(0 as char, char::MAX) {
+            assert!(wildc.contains(c));
+        }
+
+        let wildbc = Wildcard::<ByteOrChar>;
+        for c in char_iter::new(0 as char, char::MAX) {
+            assert!(wildbc.contains(c.into()));
+        }
+        for b in 0...u8::MAX {
+            assert!(wildbc.contains(b.into()));
+        }
     }
 }
 

@@ -68,7 +68,6 @@ use util::set::{self, Contains};
 mod class;
 mod union;
 mod sequence;
-mod wildcard;
 mod repetition;
 
 pub mod codegen;
@@ -77,7 +76,7 @@ pub use self::class::*;
 pub use self::union::*;
 pub use self::sequence::*;
 pub use self::repetition::*;
-pub use self::wildcard::*;
+pub use self::Element::Wildcard;
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
@@ -586,7 +585,18 @@ element_is_subset_of_impl! {
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
     fn is_subset_of(&self, other: &Element<T>) -> bool {
         match self {
-            &Element::Wildcard => Wildcard.is_subset_of(other),
+            &Element::Wildcard => match other {
+                &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
+                &Element::Repeat(ref rep) => self.is_subset_of(rep.element()) && rep.count().contains(1),
+                &Element::Union(ref union) => union.iter().any(|m| self.is_subset_of(m)),
+                &Element::Class(ref class) => class.is_empty() && class.polarity() == Polarity::INVERTED,
+
+                &Element::Wildcard => true,
+
+                &Element::Atom(_) |
+                &Element::Sequence(_) |
+                &Element::Anchor(_)
+                    => false, },
             &Element::Atom(a) => match other {
                 &Element::Wildcard => true,
                 &Element::Atom(b) => a == b,
