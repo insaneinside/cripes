@@ -11,7 +11,7 @@ pub trait Contains<E>
     where E: PartialEq
 {
     /// Check if the set contains the given element.
-    fn contains(&self, element: &E) -> bool;
+    fn contains(&self, element: E) -> bool;
 }
 
 /// Interface used to check if a set contains zero elements.
@@ -101,10 +101,10 @@ pub struct AggregateSet<'a, S: 'a> {
 }
 
 impl<'a, S: 'a, E> Contains<E> for AggregateSet<'a, S>
-    where S: Contains<E>, E: PartialEq
+    where S: Contains<E>, E: Copy + PartialEq
 {
     #[inline]
-    fn contains(&self, e: &E) -> bool {
+    fn contains(&self, e: E) -> bool {
         self.sets.iter().any(|set| set.contains(e))
     }
 }
