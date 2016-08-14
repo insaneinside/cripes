@@ -505,10 +505,10 @@ impl<T> Build<GraphImpl<T>> for GraphRepr<T>
                             o
                         }),
 
-                    // When the repetition count is bounded at the upper end (let's
-                    // call that limit N), we simply build the repeated element's
-                    // subgraph N times in a chain, marking the chain's
-                    // intermediary nodes as stage outputs .
+                    // When the repetition count is bounded at the upper end
+                    // (let's call that limit N), we simply build the repeated
+                    // element's subgraph N times in a chain, marking the
+                    // chain's intermediary nodes as stage outputs.
                     RepeatCount::AtMost(n)
                         => b.recurse(next, *repetition.into_inner().0, |b, tgt, input| {
                             let mut intermediates = Vec::from(b.stage_inputs());
@@ -529,8 +529,8 @@ impl<T> Build<GraphImpl<T>> for GraphRepr<T>
                         => b.chain(next, iter::repeat(*repetition.into_inner().0).take(n), &Self::build_recursive),
 
                     // Ranges (where the minimum is greater than zero and the
-                    // maximum is finite) are handled as exact repetitions followed
-                    // by RepeatCount::At
+                    // maximum is finite) are handled as exact repetitions
+                    // followed by `RepeatCount::AtMost` repetitions.
                     RepeatCount::Between(n, m)
                         => b.recurse(next, repetition.element().clone(), |b, tgt, input| {
                             b.chain(tgt, iter::repeat(input).take(n), &Self::build_recursive);
