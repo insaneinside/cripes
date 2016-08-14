@@ -15,6 +15,7 @@ fn test_simple_value() {
     }
     {
         let x = b.store(vec![0x55usize;32]);
+        assert_eq!(*x, &[0x55usize;32]);
         println!("{:?}", x);        
     }
 
