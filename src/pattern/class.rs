@@ -241,8 +241,18 @@ impl<'a, T: 'a + Atom> set::Contains<&'a ClassMember<T>> for Class<T> {
     }
 }
 impl<T: Atom> set::Contains<T> for Class<T> {
+    /// Check if any member of the class matches the given atom.
     fn contains(&self, x: T) -> bool {
         self.matches(x)
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<T> for Class<T> {
+    /// A class *can* be a subset of an atom -- as long as that atom is the
+    /// only member of the class!
+    #[inline]
+    fn is_subset_of(&self, atom: &T) -> bool {
+        self.contains(*atom) && self.polarity == Polarity::NORMAL && self.len() == 1
     }
 }
 
@@ -250,8 +260,10 @@ impl<T: Atom> set::Contains<T> for Class<T> {
 // structure or clever algorithm in order to perform this test in a time better
 // than O(N·M).
 impl<T: Atom> set::IsSubsetOf<Class<T>> for Class<T> {
+    /// A class `A` is a subset of another class `B` if all atoms in `A` are
+    /// also in `B`.
     fn is_subset_of(&self, other: &Self) -> bool {
-        self.iter_members().flat_map(|m| m.iter()).all(|a| other.contains(a))
+        self.iter().all(|a| other.contains(a))
     }
 }
 impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Class<T> {
@@ -267,27 +279,29 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Class<T> {
 impl<T: Atom> set::IsSubsetOf<Union<T>> for Class<T> {
     /// A class is a subset of a union if all members of the class are subsets
     /// of the union.
-    fn is_subset_of(&self, _: &Union<T>) -> bool {
-        unimplemented!()
+    fn is_subset_of(&self, union: &Union<T>) -> bool {
+        self.iter().all(|a| a.is_subset_of(union))
     }        
 }
 
 impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Class<T> {
-    fn is_subset_of(&self, _: &Repetition<T>) -> bool {
-        unimplemented!()
+    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
+        self.iter().all(|a| a.is_subset_of(rep.element())) && rep.count().contains(1)
     }
 }
 
 
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Class<T> {
+    /// A class is always a subset of a wildcard, and never a subset of an
+    /// anchor.  See the other `IsSubsetOf` implementations for `Class` for
+    /// explanations of how this trait is implements for the other variants of
+    /// `Element`.
     fn is_subset_of(&self, other: &Element<T>) -> bool {
         match other {
             // Anything we can do, Wildcard can do betteeeeer...
             &Element::Wildcard => true,
 
-            // A class *can* be a subset of an atom -- as long as that atom is
-            // the only member of the class.
-            &Element::Atom(a) => self.contains(a) && self.polarity == Polarity::NORMAL && self.len() == 1,
+            &Element::Atom(a) => self.is_subset_of(&a),
             &Element::Class(ref d) => self.is_subset_of(d),
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
             &Element::Sequence(ref seq) => self.is_subset_of(seq),
