@@ -208,6 +208,13 @@ impl<T: Atom> Class<T> {
     pub fn iter_members<'a>(&'a self) -> impl Iterator<Item=&'a ClassMember<T>> {
         self.members.iter()
     }
+
+    /// Fetch an iterator over the atoms specified in the class.
+    ///
+    /// Note that if the class has inverted polarity, these will be those atoms
+    /// which are **not** matched by the class.
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=T> + 'a {
+        self.members.iter().flat_map(|m| m.iter())
     }
 }
 
