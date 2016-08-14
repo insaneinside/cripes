@@ -50,6 +50,8 @@
 //! [atom]: trait.Atom.html
 //! [element]: enum.Element.html
 //! [set-module]: ../util/set/index.html
+//! [set-Contains]: ../util/set/trait.Contains.html
+//! [set-IsSupersetOf]: ../util/set/trait.IsSubsetOf.html
 
 use std;
 use std::{char, u8, u16, u32, u64, usize};
