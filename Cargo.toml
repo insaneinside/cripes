@@ -36,7 +36,7 @@ bit-set = "0.4.0"
 num-traits = "*"
 smallvec = "*"
 itertools = "*"
-error-chain = "^0.4.0"
+error-chain = "0.5"
 
 dot = { version = "^0.1.0", optional = true }
 regex-syntax = { version = "^0.3.0", optional = true }
