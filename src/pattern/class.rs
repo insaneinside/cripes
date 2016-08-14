@@ -7,7 +7,8 @@ use std::fmt::{self, Debug};
 use regex_syntax;
 use itertools::Itertools;
 
-use super::{Atom, ByteOrChar, Element, Repetition, Sequence, Union, Step};
+use super::{Atom, ByteOrChar, Element, Repetition, Sequence, Union};
+use super::{Distance, Step};
 use util::set::{self, Contains};
 
 // ----------------------------------------------------------------
@@ -138,20 +139,11 @@ impl<T: Atom> From<Range<T>> for ClassMember<T>
 }
 // ----------------------------------------------------------------
 
-// To hide the implementation details, we wrap the type alias in
-// a private submodule.
-mod class_impl {
-    use std::slice;
-    use super::ClassMember;
-    pub type Inner<T> = Vec<ClassMember<T>>;
-    pub type Iter<'a,T> = slice::Iter<'a,ClassMember<T>>;
-}
-
 /// A set of atoms and/or ranges of atoms.
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Class<T: Atom> {
     polarity: Polarity,
-    members: class_impl::Inner<T>
+    members: Vec<ClassMember<T>>
 }
 
 // FIXME: [optimize] All operations on a Class<T>, including observer and
