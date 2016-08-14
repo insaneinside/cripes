@@ -37,10 +37,12 @@ impl<T: Atom> ClassMember<T> {
     }
 
     /// Get the number of individual atoms that this class member represents.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+        where T: Distance
+    {
         match self {
             &ClassMember::Atom(_) => 1,
-            &ClassMember::Range(first, last) => last.distance(&first),
+            &ClassMember::Range(first, last) => last.distance(&first) + 1,
         }
     }
 
