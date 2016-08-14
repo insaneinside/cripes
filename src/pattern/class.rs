@@ -160,6 +160,13 @@ impl<T: Atom> Class<T> {
         Class{polarity: p, members: Vec::from_iter(items.into_iter().map(|x| x.into()))}
     }
 
+    /// Create a new Class instance from an iterator of ClassMember instances.
+    pub fn from_members<I>(m: I) -> Self
+        where I: IntoIterator<Item=ClassMember<T>>
+    {
+        Class{polarity: Polarity::NORMAL, members: m.into_iter().collect()}
+    }
+
     /// Map the atoms in the class to a different atom type.
     pub fn map_atoms<U, F>(self, f: F) -> Class<U>
         where F: Fn(T) -> U,
