@@ -21,6 +21,11 @@
 #![feature(inclusive_range)]
 #![feature(inclusive_range_syntax)]
 
+// `conservative_impl_trait` is used to provide iterators from various types
+// without resorting to unwieldy workarounds or viral proliferation of
+// lifetime parameters.
+#![feature(conservative_impl_trait)]
+
 // `stmt_expr_attributes` is used to enable debug output crate-wide using crate
 // feature "debug".
 #![feature(stmt_expr_attributes)]

@@ -45,10 +45,11 @@ impl<T: Atom> ClassMember<T> {
 
     /// Fetch an iterator over each discrete value contained by this member.
     #[inline]
-    pub fn iter(&self) -> AtomIter<T> {
+     pub fn iter(&self) -> impl Iterator<Item=T>
+        where T: Step {
         match self {
             &ClassMember::Atom(a) => AtomIter(a...a),
-            &ClassMember::Range(a, b) => AtomIter(a...b)
+            &ClassMember::Range(a, b) => AtomIter(a...b),
         }
     }
 }
@@ -66,7 +67,7 @@ impl<T: Atom> set::Contains<T> for ClassMember<T> {
 
 
 /// Iterator over the atoms specified by a class member.
-pub struct AtomIter<T: Atom>(RangeInclusive<T>);
+struct AtomIter<T: Atom>(RangeInclusive<T>);
 
 impl<T: Atom> Iterator for AtomIter<T>
         where T: Step
@@ -206,9 +207,13 @@ impl<T: Atom> Class<T> {
     }
 
 
-    /// Fetch an iterator over the members of the class.
-    pub fn iter_members<'a>(&'a self) -> ClassMembersIterator<'a,T> {
-        ClassMembersIterator(self.members.iter())
+    /// Fetch an iterator over the members specified in the class.
+    ///
+    /// Note that if the class has inverted polarity, the atoms in these
+    /// members will be those which are **not** matched by the class.
+    pub fn iter_members<'a>(&'a self) -> impl Iterator<Item=&'a ClassMember<T>> {
+        self.members.iter()
+    }
     }
 }
 
@@ -310,21 +315,6 @@ impl_class_from!(char, regex_syntax::CharClass);
 impl_class_from!(u8, regex_syntax::ByteClass);
 impl_class_from!(ByteOrChar, regex_syntax::CharClass);
 impl_class_from!(ByteOrChar, regex_syntax::ByteClass);
-
-// ----------------------------------------------------------------
-
-/// Iterator over the members of a class
-pub struct ClassMembersIterator<'a,T: 'a + Atom>(class_impl::Iter<'a,T>);
-
-impl<'a,T: 'a + Atom> Iterator for ClassMembersIterator<'a,T> {
-    type Item = &'a ClassMember<T>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-}
-
 
 // ----------------------------------------------------------------
 
