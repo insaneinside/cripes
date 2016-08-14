@@ -170,7 +170,7 @@ impl<T: Atom> Class<T> {
 
     /// Check whether the class would match a particular atom.
     pub fn matches(&self, x: T) -> bool {
-        self.has_member(x).bitxor(self.polarity == Polarity::NORMAL)
+        self.has_member(x).bitxor(self.polarity == Polarity::INVERTED)
     }
 
     /// Check whether a particular atom is a member of this class.
