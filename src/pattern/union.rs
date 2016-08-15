@@ -12,7 +12,6 @@ use super::{Atom, Class, Element, Repetition, Sequence, flatten_vec};
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
 mod union_impl {
-    use std::slice;
     use super::super::Element;
     pub type Inner<T> = Vec<Element<T>>;
 }
