@@ -15,7 +15,6 @@ mod union_impl {
     use std::slice;
     use super::super::Element;
     pub type Inner<T> = Vec<Element<T>>;
-    pub type Iter<'a,T> = slice::Iter<'a,Element<T>>;
 }
 
 /// Union of patterns.
@@ -32,8 +31,8 @@ impl<T: Atom> Union<T> {
     }
 
     /// Fetch an iterator over the members of the union
-    pub fn iter<'a>(&'a self) -> UnionIterator<'a,T> {
-        UnionIterator(self.0.iter())
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a Element<T>> {
+        self.0.iter()
     }
 
     /// Get the number of members in the union
@@ -134,18 +133,5 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
             &Element::Atom(_) => false,
             &Element::Anchor(_) => false,
         }
-    }
-}
-
-
-/// Iterator over the patterns within a union.
-pub struct UnionIterator<'a,T: 'a + Atom>(union_impl::Iter<'a,T>);
-
-impl<'a,T: 'a + Atom> Iterator for UnionIterator<'a,T> {
-    type Item = &'a Element<T>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
     }
 }
