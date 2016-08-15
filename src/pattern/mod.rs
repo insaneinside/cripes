@@ -144,10 +144,10 @@ pub trait Distance {
     fn distance(&self, b: &Self) -> usize;
 }
 
-macro_rules! impl_for_primitives {
+macro_rules! impl_step_distance_for_primitives {
     ($first: tt, $($rest:tt),+) => (
-        impl_for_primitives!($first);
-        impl_for_primitives!($($rest),+);
+        impl_step_distance_for_primitives!($first);
+        impl_step_distance_for_primitives!($($rest),+);
     );
     ($tp: tt) => (
         impl Step for $tp {
@@ -169,7 +169,7 @@ macro_rules! impl_for_primitives {
     );
 }
 
-impl_for_primitives!(u8, u16, u32, u64, usize);
+impl_step_distance_for_primitives!(u8, u16, u32, u64, usize);
 
 const SURROGATE_RANGE: Range<u32> = 0xD800..0xE000;
 
