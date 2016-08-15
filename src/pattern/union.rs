@@ -93,9 +93,9 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Union<T> {
     /// sequences whose elements are subsets of the corresponding element in S.
     fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
         self.iter().all(|m| match m {
-            &Element::Sequence(ref s) => 
-                seq.len() == s.len() &&
-                seq.iter().zip(s.iter()).all(|(seq_elt, s_elt)| s_elt.is_subset_of(seq_elt)),
+            &Element::Sequence(ref member_seq) =>
+                seq.len() == member_seq.len() &&
+                seq.iter().zip(member_seq.iter()).all(|(seq_elt, member_seq_elt)| member_seq_elt.is_subset_of(seq_elt)),
             _ => false })
     }
 }
