@@ -9,10 +9,8 @@ use super::{Atom, Class, Element, Repetition, Union, flatten_vec};
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
 mod seq_impl {
-    use std::slice;
     use ::pattern::Element;
     pub type Inner<T> = Vec<Element<T>>;
-    pub type Iter<'a,T> = slice::Iter<'a,Element<T>>;
 }
 
 /// Sequence of patterns.
@@ -34,8 +32,8 @@ impl<T: Atom> Sequence<T> {
     }
 
     /// Fetch an iterator over the elements in the sequence
-    pub fn iter<'a>(&'a self) -> SequenceIterator<'a,T> {
-        SequenceIterator(self.0.iter())
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a Element<T>> {
+        self.0.iter()
     }
 
     fn into_inner(self) -> seq_impl::Inner<T> {
@@ -142,20 +140,3 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
         }
     }
 }
-
-
-// ----------------------------------------------------------------
-
-/// Iterator over the patterns within a sequence.
-pub struct SequenceIterator<'a,T: 'a + Atom>(seq_impl::Iter<'a,T>);
-
-impl<'a,T: 'a + Atom> Iterator for SequenceIterator<'a,T> {
-    type Item = &'a Element<T>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-}
-
-
