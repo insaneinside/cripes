@@ -1,5 +1,6 @@
 //! Pattern-sequence data structures and implementations.
 
+use std::ops::Index;
 use std::iter::FromIterator;
 
 use util::set::{self, Contains};
@@ -60,6 +61,14 @@ impl<T: Atom> Sequence<T> {
                     |elt| match elt { &Element::Sequence(ref s) => Some(s.len()), _ => None },
                     |elt| match elt { Element::Sequence(s) => s.into_inner(), _ => unreachable!() });
     }
+}
+
+impl<T: Atom> Index<usize> for Sequence<T> {
+    type Output = Element<T>;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+
 }
 
 impl<T: Atom> FromIterator<Element<T>> for Sequence<T> {
