@@ -78,6 +78,12 @@ pub use self::class::*;
 pub use self::union::*;
 pub use self::sequence::*;
 pub use self::repetition::*;
+
+/// Single-element pattern that matches atom.
+///
+/// This is re-exported to parallel the types contained by
+/// [`Element`](enum.Element.html)'s data-bearing variants, which can be used
+/// separately from `Element`.
 pub use self::Element::Wildcard;
 
 /// Trait-bounds requirements for atomic values in a pattern.
