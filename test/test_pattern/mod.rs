@@ -1,3 +1,24 @@
+use std::fmt::Debug;
+use std::convert::TryFrom;
+use regex_syntax;
+use cripes::pattern::{Atom, Element};
+
+fn from_regex<T: Atom>(s: &str) -> Element<T>
+    where Element<T>: TryFrom<regex_syntax::Expr>,
+          <Element<T> as TryFrom<regex_syntax::Expr>>::Err: Debug
+{
+    TryFrom::try_from(regex_syntax::Expr::parse(s).unwrap()).unwrap()
+}
+
+/// Helper for parsing a regex and returning the inner pattern type.
+macro_rules! from_regex {
+    ($s: tt -> Element<$T: ty>) => ( from_regex::<$T>($s) );
+
+    ($s: tt -> $which: ident < $T: ty>) => ( match from_regex::<$T>($s) {
+        Element::$which(x) => x,
+        _ => unreachable!() });
+}
+
 mod sequence {
     use std::iter::FromIterator;
     use cripes::pattern::{Class, Element, Sequence, Union};
@@ -10,6 +31,9 @@ mod sequence {
         let seqs = (&["adg", "beh", "cfi"]).iter().map(|s| Sequence::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
         let useq = Sequence::from_iter(unions.iter().map(|u| Element::Union(u.clone())));
         let cseq = Sequence::from_iter(classes.iter().map(|c| Element::Class(c.clone())));
+        assert!(useq.is_subset_of(&useq));
+        assert!(cseq.is_subset_of(&cseq));
+
         assert!(useq.is_subset_of(&cseq));
         assert!(cseq.is_subset_of(&useq));
 
@@ -17,6 +41,56 @@ mod sequence {
             assert!(seq.is_subset_of(&cseq));
             assert!(seq.is_subset_of(&useq));
         }
+    }
+}
+
+mod union {
+    use super::from_regex;
+    use std::iter::FromIterator;
+    use cripes::pattern::{Element, Union, Wildcard};
+    use cripes::util::set::{Contains, IsSubsetOf};
+
+    #[test]
+    fn test_contains() {
+        let u = Union::from_iter("abc".chars().map(|c| c.into()));
+        assert!(u.contains('a'));
+        assert!(u.contains('b'));
+        assert!(u.contains('c'));
+    }
+
+    #[test]
+    fn test_is_subset_of_union() {
+        let u1 = Union::<char>::from_iter("abc".chars().map(|c| c.into()));
+        let u2 = Union::from_iter("abcdef".chars().map(|c| c.into()));
+        assert!(u1.is_subset_of(&u2));
+        assert!(! u2.is_subset_of(&u1));
+
+        assert!(u1.is_subset_of(&Wildcard));
+        assert!(u2.is_subset_of(&Wildcard));
+    }
+    #[test]
+    fn test_is_subset_of_sequence() {
+        let seq_of_classes = from_regex!("[abc][def][ghi]" -> Sequence<char>);
+        let seq_of_unions = from_regex!("(a|b|c)(d|e|f)(g|h|i)" -> Sequence<char>);
+
+        let union_of_seqs = from_regex!("adg|beh|ghi" -> Union<char>);
+        println!("{:?}", union_of_seqs);
+        assert_eq!(3, union_of_seqs.len());
+
+        // check that the union would match each contained sequence.
+        for seq in union_of_seqs.iter() {
+            println!("{:?}", seq);
+            assert!(seq.is_subset_of(&union_of_seqs));
+            assert!(seq.is_subset_of(&seq_of_classes));
+            assert!(seq.is_subset_of(&seq_of_unions));
+        }
+
+        assert!(union_of_seqs.is_subset_of(&seq_of_classes));
+        assert!(union_of_seqs.is_subset_of(&seq_of_unions));
+
+        assert!(! seq_of_classes.is_subset_of(&union_of_seqs));
+        assert!(! seq_of_unions.is_subset_of(&union_of_seqs));
+
     }
 }
 
@@ -63,7 +137,7 @@ mod class {
     use std::iter::FromIterator;
 
     use char_iter;
-    use cripes::pattern::{Class, ClassMember, Element, Polarity, Wildcard};
+    use cripes::pattern::{Class, ClassMember, Wildcard};
     use cripes::util::set::{Contains, IsSubsetOf, IsSupersetOf};
 
     #[test]
