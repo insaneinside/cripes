@@ -623,6 +623,11 @@ element_is_subset_of_impl! {
 }
 
 
+element_is_subset_of_impl! {
+    T, Sequence<T>, seq, self;
+    &Element::Atom(_) => false,
+    &Element::Wildcard => false
+}
 
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
     fn is_subset_of(&self, other: &Element<T>) -> bool {
