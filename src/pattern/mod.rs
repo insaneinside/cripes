@@ -647,8 +647,9 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
             &Element::Atom(a) => match other {
                 &Element::Wildcard => true,
                 &Element::Atom(b) => a == b,
-                &Element::Class(ref c) => c.contains(a),
-                &Element::Repeat(ref r) => self.is_subset_of(r),
+                &Element::Class(ref c) => a.is_subset_of(c),
+                &Element::Repeat(ref r) => a.is_subset_of(r),
+                &Element::Union(ref u) => a.is_subset_of(u),
                 _ => false },
             &Element::Class(ref c) => c.is_subset_of(other),
             &Element::Sequence(ref s) => s.is_subset_of(other),
