@@ -10,13 +10,20 @@ fn from_regex<T: Atom>(s: &str) -> Element<T>
     TryFrom::try_from(regex_syntax::Expr::parse(s).unwrap()).unwrap()
 }
 
+macro_rules! extract_variant {
+    ((ref $input: expr) -> $variant: ident) => ( match $input {
+        &Element::$variant(ref x) => x,
+        _ => unreachable!() });
+
+    (($input: expr) -> $variant: ident) => ( match $input {
+        Element::$variant(x) => x,
+        _ => unreachable!() });
+}
+
 /// Helper for parsing a regex and returning the inner pattern type.
 macro_rules! from_regex {
     ($s: tt -> Element<$T: ty>) => ( from_regex::<$T>($s) );
-
-    ($s: tt -> $which: ident < $T: ty>) => ( match from_regex::<$T>($s) {
-        Element::$which(x) => x,
-        _ => unreachable!() });
+    ($s: tt -> $which: ident < $T: ty>) => (extract_variant!((from_regex::<$T>($s)) -> $which));
 }
 
 mod sequence {
@@ -31,13 +38,23 @@ mod sequence {
         let seqs = (&["adg", "beh", "cfi"]).iter().map(|s| Sequence::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
         let useq = Sequence::from_iter(unions.iter().map(|u| Element::Union(u.clone())));
         let cseq = Sequence::from_iter(classes.iter().map(|c| Element::Class(c.clone())));
+
+        // Every sequence should be a subset of itself.
         assert!(useq.is_subset_of(&useq));
         assert!(cseq.is_subset_of(&cseq));
 
+        // `useq` and `cseq` should be subsets of each other.
         assert!(useq.is_subset_of(&cseq));
         assert!(cseq.is_subset_of(&useq));
 
+        // each sequence in `seqs` should be a subset of both `useq` and
+        // `cseq`.
         for seq in seqs.iter() {
+            for i in 0..3 {
+                assert!(seq[i].is_subset_of(&cseq[i]));
+                assert!(seq[i].is_subset_of(&useq[i]));
+            }
+
             assert!(seq.is_subset_of(&cseq));
             assert!(seq.is_subset_of(&useq));
         }
@@ -73,7 +90,7 @@ mod union {
         let seq_of_classes = from_regex!("[abc][def][ghi]" -> Sequence<char>);
         let seq_of_unions = from_regex!("(a|b|c)(d|e|f)(g|h|i)" -> Sequence<char>);
 
-        let union_of_seqs = from_regex!("adg|beh|ghi" -> Union<char>);
+        let union_of_seqs = from_regex!("adg|beh|cfi" -> Union<char>);
         println!("{:?}", union_of_seqs);
         assert_eq!(3, union_of_seqs.len());
 
@@ -81,6 +98,14 @@ mod union {
         for seq in union_of_seqs.iter() {
             println!("{:?}", seq);
             assert!(seq.is_subset_of(&union_of_seqs));
+
+            for i in 0..3 {
+                let s = extract_variant!((ref seq) -> Sequence);
+                println!("{:?} <=> {:?}", s[i], seq_of_unions[i]);
+                assert!(s[i].is_subset_of(&seq_of_unions[i]));
+                assert!(s[i].is_subset_of(&seq_of_classes[i]));
+            }
+
             assert!(seq.is_subset_of(&seq_of_classes));
             assert!(seq.is_subset_of(&seq_of_unions));
         }
