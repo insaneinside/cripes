@@ -1,57 +1,56 @@
 //! Structural representations of regular patterns.
 //!
+//! ## Atoms
+//!
 //! Patterns are parameterized by the _kind_ of thing &mdash; bounded by the
-//! [`Atom`][atom] trait &mdash; those patterns describe; regular expressions,
+//! [`Atom`][Atom] trait &mdash; those patterns describe; regular expressions,
 //! for example, are usually patterns of characters.  Like their real-world
 //! counterparts, `Atom`s are indivisible: they represent the smallest unit
 //! that will be analyzed by any algorithm.
 //!
-//! Alone, an atom matches only itself; the variants of the
-//! [`Element`][element] are what provides the capability to specify arbitrary
+//! Atom and its prerequisites are implemented for all of Rust's primitive
+//! types; the crate also provides a [`ByteOrChar`][ByteOrChar] atom type,
+//! which is capable of representing either a `u8` or a `char` and is suitable
+//! for use with mixed binary/UTF-8 patterns.
+//!
+//! [Atom]: trait.Atom.html
+//! [ByteOrChar]: enum.ByteOrChar.html
+//!
+//! ### `Distance` and `Step`
+//!
+//! If an atom is to be used in range-like constructs like
+//! [`ClassMember`][ClassMember]`::Range`, it must have implementations of the
+//! [`Distance`][Distance] and [`Step`][Step] traits available.  These traits
+//! allow iterating over ranges of values of types that implement them.
+//!
+//! [ClassMember]: enum.ClassMember.html
+//! [Step]: trait.Step.html
+//! [Distance]: trait.Distance.html
+//!
+//! ## Pattern types
+//!
+//! Alone, an atom matches only itself; other the variants of the
+//! [`Element`][Element] are what provides the capability to specify arbitrary
 //! regular patterns.  For more details about these variants, visit
 //! `Element`'s documentation.
+//!
+//! [Element]: enum.Element.html
 //!
 //! ## Semantics of Set Implementations
 //!
 //! Types in this module implement several traits from the [`set`
-//! module][set-module] like [IsSubsetOf][set-IsSubsetOf] and
-//! [Contains][set-Contains].  When using these traits, we view a pattern
+//! module][set-module] like [`IsSubsetOf`][set-IsSubsetOf] and
+//! [`Contains`][set-Contains].  When using these traits, we view a pattern
 //! element as the *set of possible inputs* that would match that element; for
-//! example a wildcard is always a superset of an atom or atom class:
+//! example, a wildcard is always a superset of an atom or atom class &mdash;
+//! but never a superset of any pattern of non-unit length.
 //!
-//! ```rust
-//! # extern crate cripes;
-//! use std::iter::FromIterator;
-//! use cripes::pattern::*;
-//! use cripes::util::set::IsSubsetOf;
-//! # fn main() {
-//! assert!(Element::Atom('x').is_subset_of(&Element::Wildcard));
-//! assert!(Class::from_iter("xyz".chars()).is_subset_of(&Element::Wildcard));
-//! # }
-//! ```
+//! Each `IsSubsetOf` implementation is documented with the reasoning behind
+//! its implementation.
 //!
-//! It is not, however, a superset of any pattern of non-unit length:
-//!
-//! ```rust
-//! # extern crate cripes;
-//! use std::iter::FromIterator;
-//! use cripes::pattern::*;
-//! use cripes::util::set::{IsSubsetOf, IsSupersetOf};
-//! # fn main() {
-//! let union = Union::from_iter(["abc", "def", "ghi"].iter()
-//!                              .map(|s| Sequence::<char>::from_iter(s.chars())));
-//! let wild = Element::Wildcard;
-//!
-//! assert!(! union.is_subset_of(&wild));
-//! assert!(! wild.is_subset_of(&union));
-//! # }
-//! ```
-//!
-//! [atom]: trait.Atom.html
-//! [element]: enum.Element.html
 //! [set-module]: ../util/set/index.html
 //! [set-Contains]: ../util/set/trait.Contains.html
-//! [set-IsSupersetOf]: ../util/set/trait.IsSubsetOf.html
+//! [set-IsSubsetOf]: ../util/set/trait.IsSubsetOf.html
 
 use std;
 use std::{char, u8, u16, u32, u64, usize};
