@@ -57,7 +57,7 @@ use std;
 use std::{char, u8, u16, u32, u64, usize};
 use std::{ptr, cmp};
 use std::convert::{TryFrom, TryInto};
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::Range;
 use std::iter::{FromIterator,IntoIterator};
 use std::fmt::{self,Display,Debug};
 
@@ -356,60 +356,6 @@ pub enum Anchor/*<T: Atom>*/ {
     /// Match the *FA with entry at the given node, behind the
     /// current position.
     LookBehind(Box<Transition<T>>)*/
-}
-
-// ----------------------------------------------------------------
-
-/// Metadata-storage wrapper for pattern elements.
-#[derive(Clone,Debug)]
-pub struct Tagged<T>
-    where T: Clone + Debug {
-    value: T,
-
-    /// Actions that should be executed before the contained value is processed
-    pub preactions: Vec<Action>,
-
-    /// Actions that should be executed after the contained value is processed
-    pub postactions: Vec<Action>
-}
-
-impl<T: Clone + Debug> Tagged<T> {
-    /// Create a new Tagged instance with the given value.
-    pub fn new(value: T) -> Self {
-        Tagged{value: value,
-               preactions: Vec::new(),
-               postactions: Vec::new()}
-    }
-
-    /// Deconstruct the Tagged instance into its components
-    pub fn unwrap(self) -> (T, Vec<Action>, Vec<Action>) {
-        (self.value, self.preactions, self.postactions)
-    }
-}
-
-impl<T: Clone + Debug> Deref for Tagged<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl<T: Clone + Debug> DerefMut for Tagged<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
-}
-
-impl<T: Clone + Debug> From<T> for Tagged<T> {
-    fn from(thing: T) -> Self {
-        Tagged::new(thing)
-    }
-}
-
-impl<'a,T: Clone + Debug> From<&'a T> for Tagged<T> {
-    fn from(thing: &'a T) -> Self {
-        Tagged::new(thing.clone())
-    }
 }
 
 
