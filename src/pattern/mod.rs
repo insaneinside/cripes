@@ -617,11 +617,12 @@ impl<T: Atom> From<T> for Element<T> {
 #[cfg(feature = "regex")]
 #[allow(missing_docs)]
 mod regex_conv {
-    use regex_syntax::Expr;
+    use regex_syntax;
     error_chain! {
         types { RegexConvError, RegexConvErrorKind, RegexConvErrorChain, RegexConvResult; }
+        foreign_links { regex_syntax::Error, ParseFailure; }
         errors {
-            UnsupportedFeature(expr: Expr, feature: String) {
+            UnsupportedFeature(expr: regex_syntax::Expr, feature: String) {
                 description("unsupported feature")
                     display("{} is not supported", feature)
             }
@@ -776,5 +777,21 @@ impl Display for Element<char> {
                 => Display::fmt(repetition, f),
             _ => <Self as Debug>::fmt(self, f)
         }
+    }
+}
+
+
+
+// ----------------------------------------------------------------
+
+/// Parse a `regex`-style regular expression and return the corresponding
+/// Pattern object.
+#[cfg(feature="regex")]
+pub fn parse_regex<T: Atom>(s: &str) -> RegexConvResult<Element<T>>
+    where Element<T>: TryFrom<Expr,Err=RegexConvError>
+{
+    match Expr::parse(s) {
+        Err(e) => Err(RegexConvErrorKind::ParseFailure(e).into()),
+        Ok(expr) => expr.try_into()
     }
 }
