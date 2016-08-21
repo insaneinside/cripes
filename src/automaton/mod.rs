@@ -21,12 +21,24 @@ use bit_set::BitSet;
 use regex_syntax;
 
 use util::set::{self, Contains};
-use pattern::{Action, Atom, ByteOrChar, Class, Element, RepeatCount};
+use pattern::{Atom, ByteOrChar, Class, Element, RepeatCount};
 use util::graph::interface::*;
 use util::graph::{self,Build, Builder, Target, WeightedNode};//, Graph as Graphlike, DirectedGraph, Id as GraphID};
 
 pub mod interface;
 use self::interface::{Automaton, DeterministicAutomaton, NondeterministicAutomaton};
+
+/// An action to be performed immediately before or after any pattern element
+/// is consumed.
+#[derive(Clone,Debug,PartialEq)]
+pub enum Action {
+    /// Mark the start of a captured portion of input at the current cursor
+    /// location
+    BeginSubmatch(String),
+    /// Mark the end of a captured portion of input at the current cursor
+    /// location
+    EndSubmatch(String)
+}
 
 /// Possible transitions in the automaton types implemented in this module.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

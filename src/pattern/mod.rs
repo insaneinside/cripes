@@ -320,19 +320,6 @@ impl std::ascii::AsciiExt for ByteOrChar {
     }
 }
 
-/// An action to be performed immediately before or after any pattern element
-/// is consumed.
-#[derive(Clone,Debug,PartialEq)]
-pub enum Action {
-    /// Mark the start of a captured portion of input at the current cursor
-    /// location
-    BeginSubmatch(String),
-    /// Mark the end of a captured portion of input at the current cursor
-    /// location
-    EndSubmatch(String)
-}
-
-
 // ================================================================
 // Patterns
 
