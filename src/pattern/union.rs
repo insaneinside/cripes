@@ -106,9 +106,9 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Union<T> {
 }
 
 macro_rules! is_subset_if_all_members_are_subsets {
-    ($T: ident,$Other: ty, $name: ident) => {
+    ($T: ident,$Other: ty, $name: ident; $doc: expr) => {
         impl<$T: Atom> set::IsSubsetOf<$Other> for Union<$T> {
-            /// A union is a subset of a $name if all members are subsets.
+            #[doc = $doc]
             fn is_subset_of(&self, $name: &$Other) -> bool {
                 self.iter().all(|m| m.is_subset_of($name))
             }
@@ -116,9 +116,23 @@ macro_rules! is_subset_if_all_members_are_subsets {
     };
 }
 
-is_subset_if_all_members_are_subsets!(T, Repetition<T>, repetition);
-is_subset_if_all_members_are_subsets!(T, Class<T>, class);
-is_subset_if_all_members_are_subsets!(T, Union<T>, union);
+// This one should never happen, but we'll happily support whatever brain-dead
+// comparisons you want to try!
+is_subset_if_all_members_are_subsets! {
+    T, T, repetition;
+    "A union is a subset of an atom if all members are subsets of that atom"}
+
+is_subset_if_all_members_are_subsets! {
+    T, Repetition<T>, repetition;
+    "A union is a subset of a repetition if all members of the union are subsets of the repetition"}
+
+is_subset_if_all_members_are_subsets! {
+    T, Class<T>, class;
+    "A union is a subset of a class of atoms if all members of the union are subsets of the class"}
+
+is_subset_if_all_members_are_subsets! {
+    T, Union<T>, union;
+    "A union is a subset of another union if all members of the former are subsets of the latter"}
 
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
@@ -128,14 +142,12 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
             &Element::Sequence(ref s) => self.is_subset_of(s),
             &Element::Repeat(ref r) => self.is_subset_of(r),
             &Element::Union(ref u) => self.is_subset_of(u),
+            &Element::Atom(atom) => self.is_subset_of(&atom),
 
             // A union is a subset of a wildcard if all members are
             // also subsets.
             &Element::Wildcard => self.iter().all(|m| m.is_subset_of(&Element::Wildcard)),
 
-            // Unions always contain at least two unique members, thus they
-            // cannot be subsets of single atoms.
-            &Element::Atom(_) => false,
             &Element::Anchor(_) => false,
         }
     }

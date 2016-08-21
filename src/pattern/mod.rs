@@ -88,6 +88,13 @@ pub use self::Element::Wildcard;
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 
+impl<T: Atom> set::IsSubsetOf<T> for T {
+    #[inline(always)]
+    fn is_subset_of(&self, other: &T) -> bool {
+        self == other
+    }
+}
+
 impl<T: Atom> set::IsSubsetOf<Class<T>> for T {
     #[inline(always)]
     fn is_subset_of(&self, class: &Class<T>) -> bool {
@@ -598,6 +605,14 @@ macro_rules! element_is_subset_of_impl {
 
     };
 }
+element_is_subset_of_impl! {
+    T, T, atom, self;
+
+    &Element::Atom(a) => a.is_subset_of(atom),
+    &Element::Wildcard
+        => false
+}
+
 element_is_subset_of_impl! {
     T, Repetition<T>, rep, self;
 

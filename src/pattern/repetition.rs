@@ -73,6 +73,16 @@ impl<T: Atom> set::Contains<T> for Repetition<T> {
 }
 
 
+impl<T: Atom> set::IsSubsetOf<T> for Repetition<T> {
+    /// A repetition is never a subset of an atom because a repetition's repeat
+    /// count is guaranteed to never be equal to {1}.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &T) -> bool {
+        false
+    }
+}
+
+
 impl<T: Atom> set::IsSubsetOf<Class<T>> for Repetition<T> {
     /// A repetition is never a subset of an atom class because a repetition's
     /// repeat count is guaranteed to never be equal to {1}.

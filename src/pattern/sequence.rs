@@ -95,6 +95,15 @@ impl<T: Atom> set::Contains<T> for Sequence<T> {
     }
 }
 
+impl<T: Atom> set::IsSubsetOf<T> for Sequence<T> {
+    /// A sequence is a subset of a particular atom whenever the sequence has
+    /// length one, and the first element is a subset of that atom.
+    #[inline(always)]
+    fn is_subset_of(&self, atom: &T) -> bool {
+        self.len() == 1 && self[0].is_subset_of(atom)
+    }
+}
+
 // A sequence `A` can be a subset of another sequence `B` *if* both have the
 // same length and each element in `A` is a subset of the corresponding element
 // in `B`:
