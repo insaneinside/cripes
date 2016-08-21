@@ -27,9 +27,25 @@ macro_rules! from_regex {
 }
 
 mod sequence {
-    use std::iter::FromIterator;
+    use std::iter::{self, FromIterator};
     use cripes::pattern::{Class, Element, Sequence, Union};
+    use cripes::pattern::Reduce;
     use cripes::util::set::IsSubsetOf;
+
+    #[test]
+    fn test_reduce() {
+        let seq_of_seqs = Sequence::from_iter(["abc", "def", "ghi"].iter().map(|s| Sequence::from_iter(s.chars().map(|c| c.into())).into()));
+        let flat_seq = Sequence::<char>::from_iter("abcdefghi".chars().map(|c| c.into()));
+
+        assert!(seq_of_seqs != flat_seq);
+        assert_eq!(Some(Element::Sequence(flat_seq)), seq_of_seqs.reduce());
+
+        // Empty sequences should reduce to `None`
+        assert_eq!(None, Sequence::<char>::from_iter(iter::empty()).reduce());
+
+        // Unit-length sequences should reduce to their only element.
+        assert_eq!(Some(Element::Wildcard), Sequence::<char>::new(vec![Element::Wildcard]).reduce());
+    }
 
     #[test]
     fn test_is_subset_of() {
