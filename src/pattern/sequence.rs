@@ -4,7 +4,8 @@ use std::ops::Index;
 use std::iter::FromIterator;
 
 use util::set::{self, Contains};
-use super::{Atom, Class, Element, Repetition, Union, flatten_vec};
+use super::{Atom, Class, Element, Repetition, Union};
+use super::{Reduce, flatten_and_reduce};
 
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
@@ -48,16 +49,23 @@ impl<T: Atom> Sequence<T> {
     {
         self.0.into_iter().map(|elt| elt.map_atoms(&f)).collect()
     }
+}
+
+impl<T: Atom> Reduce for Sequence<T> {
+    type Output = Option<Element<T>>;
 
     /// Flatten the sequence and apply implementation-defined optimizations.
-    pub fn reduce(&mut self) {
-        for elt in self.0.iter_mut() {
-            elt.reduce();
+    fn reduce(mut self) -> Self::Output {
+        // Flatten and reduce the vector *first* so we can reduce `self` based
+        // on the size of the *reduced* vector.
+       flatten_and_reduce(&mut self.0, Element::Wildcard,
+                           |elt| match elt { &Element::Sequence(ref s) => Some(s.len()), _ => None },
+                           |elt| match elt { Element::Sequence(s) => s.into_inner(), _ => unreachable!() });
+        match self.0.len() {
+            0 => None,
+            1 => Some(self.0.swap_remove(0)),
+            _ => Some(Element::Sequence(self))
         }
-
-        flatten_vec(&mut self.0,
-                    |elt| match elt { &Element::Sequence(ref s) => Some(s.len()), _ => None },
-                    |elt| match elt { Element::Sequence(s) => s.into_inner(), _ => unreachable!() });
     }
 }
 
@@ -73,7 +81,7 @@ impl<T: Atom> FromIterator<Element<T>> for Sequence<T> {
     fn from_iter<I>(iter: I) -> Self
         where I: IntoIterator<Item=Element<T>>
     {
-        Sequence::new(iter.into_iter().collect())
+        Sequence(iter.into_iter().collect())
     }
 }
 

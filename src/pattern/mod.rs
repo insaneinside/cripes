@@ -54,7 +54,7 @@
 
 use std;
 use std::{char, u8, u16, u32, u64, usize};
-use std::{ptr, cmp};
+use std::{ptr, cmp, mem};
 use std::convert::{TryFrom, TryInto};
 use std::ops::Range;
 use std::iter::{FromIterator,IntoIterator};
@@ -62,7 +62,6 @@ use std::fmt::{self,Display,Debug};
 
 #[cfg(feature="regex")]
 use regex_syntax::Expr;
-use arrayvec::ArrayVec;
 
 use util::set::{self, Contains};
 
@@ -321,12 +320,18 @@ impl std::ascii::AsciiExt for ByteOrChar {
 }
 
 // ================================================================
-// Patterns
+/// Interface for arbitrary transformations of pattern types.
+///
+/// This provides a common entry point for reduction implementations.
+pub trait Reduce {
+    /// Result of calling `reduce` for an implementation.
+    type Output;
 
-/// Top-level pattern type
-pub type Pattern<T> = Element<T>;
+    /// Reduce the receiver.
+    fn reduce(self) -> Self::Output;
+}
 
-// ----------------------------------------------------------------
+// ================================================================
 // Anchor
 
 /// Non-consuming pattern matchers.
@@ -387,75 +392,114 @@ pub enum Element<T: Atom> {
 
 }
 
-/// Flatten certain elements of a parent vector into the parent, using the
-/// passed functions or closures to determine which elements should be
-/// flattened, and how to extract the child vectors from those.
+/// Flag that indicates how a particular element in the input vector passed to
+/// `flatten_and_reduce` is to be handled.
+#[doc(hidden)]
+#[derive(Copy, Clone, PartialEq)]
+enum Mark {
+    /// Keep the element without modifications.
+    Keep,
+
+    /// Remove the element (because it reduced itself into oblivion).
+    Remove,
+
+    /// Replace the element with the contents of its contained vector.
+    Flatten(usize)
+}
+
+/// Reduce all elements of a vector, selectively flattening child vectors into
+/// the parent.
+///
+/// Uses the passed functions or closures to determine which elements should be
+/// flattened (`fetch_child_length`), and how to extract the child vectors from
+/// those (`into_child_vec`).  It is guaranteed that `into_child_vec` will only
+/// be called on those elements for which `fetch_child_length` returns
+/// `Some(length)`.
 // FIXME: should we try flattening more than one level at a time?
-fn flatten_vec<T, F, G>(v: &mut Vec<T>, f: F, g: G)
-    where F: Fn(&T) -> Option<usize>, G: Fn(T) -> Vec<T> {
+fn flatten_and_reduce<T, F, G>(v: &mut Vec<T>, placeholder: T,
+                               fetch_child_length: F,
+                               into_child_vec: G)
+    where T: Clone + Reduce<Output=Option<T>>,
+          F: Fn(&T) -> Option<usize>, G: Fn(T) -> Vec<T>
+
+{
+    use self::Mark::*;
+
+    let mut marks = Vec::with_capacity(v.len());
+    let mut total_len = 0;
 
     // Iterate over the elements in the sequence, calling `f` on each and
     // counting the total number of elements we should have after flattening.
-
-    // To avoid excess heap allocations, we'll use a fixed-size stack-allocated
-    // array to store the locations of expandable child elements; we simply
-    // loop while we have a start offset.
-    let mut child_seqs = ArrayVec::<[_;128]>::new();
-    let mut start_offset = Some(0);
-    let cur_len = v.len();
-    let mut total_len = 0;
-
-    while let Some(offset) = start_offset.take() {
-        for (index, elt) in v[offset..cur_len].iter_mut().enumerate() {
-            if let Some(len) = f(elt) {
-                total_len += len;
-                // ArrayVec returns `Some(overflow_value)` when it's full.
-                if child_seqs.push((index, len)).is_some() {
-                    // Stored start offset needs to be increased by the number
-                    // of additional elements the expanded child vectors
-                    // will store.
-                    start_offset = Some(index + total_len - cur_len);
-                    break;
+    for elt in v.iter_mut() {
+            let val = mem::replace(elt, placeholder.clone());
+            match val.reduce() {
+                None => { marks.push(Remove); },
+                Some(val) => {
+                    // Swap the reduced value back into place.
+                    mem::replace(elt, val);
+                    let (len, mark) = match fetch_child_length(elt) {
+                        None => (1, Keep),
+                        Some(len) => (len, Flatten(len)) };
+                    total_len += len;
+                    marks.push(mark);
                 }
-            } else {
-                total_len += 1;
             }
-        }
+    }
 
-        // `total_len > cur_len` means we have child sequences that
-        // can be flattened.
-        if total_len > cur_len {
-            unsafe {
-                v.set_len(total_len);
-                let mut csiter = child_seqs.iter().peekable();
-                let vp = v.as_mut_ptr();
-                while let Some(&(idx, len)) = csiter.next() {
-                    let mut cp = vp.clone().offset(idx as isize);
-                    let child_vec = g(ptr::read(cp));
+    unsafe {
+        // We'll iterate through the marks and modify the vector in reverse
+        // order, since any uninitialized elements added by the below `set_len`
+        // call will be at the end.
 
-                    // Move the non-expandable elements following `child_vec` so
-                    // they follow the expanded `child_vec`
-                    let next_idx = csiter.peek().map(|il| il.0).unwrap_or(cur_len);
-                    for i in (idx + 1)..next_idx {
-                        ptr::write(vp.clone().offset((i + len) as isize),
-                                   ptr::read(vp.clone().offset(i as isize)))
+        let mut read_ptr = v.as_mut_ptr().offset(v.len() as isize - 1);
+        let mut write_ptr = v.as_mut_ptr().offset(total_len as isize - 1);
+
+        v.set_len(total_len);
+
+        let mut marks_iter = marks.into_iter().rev().peekable();
+
+        while let Some(mark) = marks_iter.next() {
+            match mark {
+                // For `remove` we simply drop the element.
+                Remove => ptr::drop_in_place(read_ptr),
+                Keep => {
+                    // Count the number of consecutive elements to be copied,
+                    // consuming the entire run of `Keep` marks.
+                    let mut n = 1;
+                    while let Some(&Keep) = marks_iter.peek() {
+                        n += 1;
+                        marks_iter.next();
+                    }
+                    write_ptr = write_ptr.offset(-(n - 1));
+                    read_ptr = read_ptr.offset(-(n - 1));
+
+                    // move items up to the next mark back one element
+                    ptr::copy(read_ptr, write_ptr, n as usize);
+                },
+                Flatten(len) => {
+                    write_ptr = write_ptr.offset(-(len as isize - 1));
+
+                    let child_vec = into_child_vec(ptr::read(read_ptr));
+                    if child_vec.len() != len {
+                        panic!("Length mismatch when flattening child element: expected {}, found {}",
+                               len, child_vec.len());
                     }
 
                     // Expand the child vector.
-                    for elt in child_vec {
-                        ptr::write(cp, elt);
-                        cp = cp.offset(1);
-                    }
-
-                    assert_eq!(cp, vp.clone().offset((idx + len) as isize));
+                    ptr::copy(child_vec.as_ptr(), write_ptr, len);
                 }
+            }
+
+            read_ptr = read_ptr.offset(-1);
+            if mark != Remove {
+                write_ptr = write_ptr.offset(-1);
             }
         }
     }
 }
 
 #[test]
-fn test_flatten_vec() {
+fn test_flatten_and_reduce() {
     #[derive(Debug, PartialEq, Clone)]
     enum R { L(u32), V(Vec<R>) }
     impl R {
@@ -469,12 +513,20 @@ fn test_flatten_vec() {
         fn into_vec(self) -> Vec<R> {
             match self {
                 R::V(v) => v,
-                _ => Vec::from(&[self][..])
+                _ => panic!("cannot convert `{:?}` into inner vec", self)
             }
         }
     }
+
+    impl Reduce for R {
+        type Output = Option<R>;
+        fn reduce(self) -> Self::Output {
+            Some(self)
+        }
+    }
+
     let mut v = vec![R::L(1), R::L(2), R::V(vec![R::L(3), R::L(4), R::L(5)])];
-    flatten_vec(&mut v,  R::vec_len, R::into_vec);
+    flatten_and_reduce(&mut v,  R::L(std::u32::MAX), R::vec_len, R::into_vec);
     assert_eq!(&[R::L(1), R::L(2), R::L(3), R::L(4), R::L(5)], &v[..]);
 }
 
@@ -496,15 +548,19 @@ impl<T: Atom> Element<T> {
             Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
         }
     }
+}
+
+impl<T: Atom> Reduce for Element<T> {
+    type Output = Option<Element<T>>;
 
     /// "Reduce" the element in some implementation-defined way.  This method
-    /// is used for common-prefix extraction, elimination of redundant
-    /// alternatives, and flattening of unnecessarily-nested pattern elements.
-    pub fn reduce(&mut self) {
-        match *self {
-            Element::Sequence(ref mut seq) => seq.reduce(),
-            Element::Union(ref mut union) => union.reduce(),
-            _ => ()
+    /// is currently used for flattening of unnecessarily-nested pattern
+    /// elements and elimination of redundant structure.
+    fn reduce(self) -> Self::Output {
+        match self {
+            Element::Sequence(seq) => seq.reduce(),
+            Element::Union(union) => union.reduce(),
+            x => Some(x)
         }
     }
 }

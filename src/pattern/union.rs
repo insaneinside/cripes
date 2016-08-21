@@ -7,7 +7,8 @@ use std::iter::FromIterator;
 use itertools::Itertools;
 
 use util::set::{self, IsSubsetOf};
-use super::{Atom, Class, Element, Repetition, Sequence, flatten_vec};
+use super::{Atom, Class, Element, Repetition, Sequence};
+use super::{Reduce, flatten_and_reduce};
 
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
@@ -51,25 +52,30 @@ impl<T: Atom> Union<T> {
     fn into_inner(self) -> union_impl::Inner<T> {
         self.0
     }
+}
+
+impl<T: Atom> Reduce for Union<T> {
+    type Output = Option<Element<T>>;
 
     /// Flatten the union and apply implementation-defined optimizations.
-    pub fn reduce(&mut self) {
-        for elt in self.0.iter_mut() {
-            elt.reduce();
-        }
-        flatten_vec(&mut self.0,
-                    |elt| match elt { &Element::Union(ref u) => Some(u.len()), _ => None },
-                    |elt| match elt { Element::Union(u) => u.into_inner(), _ => unreachable!() });
+    fn reduce(mut self) -> Self::Output {
+        if self.0.is_empty() { None }
+        else {
+            flatten_and_reduce(&mut self.0, Element::Wildcard,
+                               |elt| match elt { &Element::Union(ref u) => Some(u.len()), _ => None },
+                               |elt| match elt { Element::Union(u) => u.into_inner(), _ => unreachable!() });
 
-        let mut reduced = self.0.clone().into_iter()
-            .sorted_by(|a, b| { if a.is_subset_of(b) || b.is_subset_of(a) { Ordering::Equal }
-                                else { a.cmp(b) } })
-            .into_iter()
-            .coalesce(|a, b| { if a.is_subset_of(&b) { Ok(b) }
-                               else if b.is_subset_of(&a) { Ok(a) }
-                               else { Err((a, b)) } })
-            .collect();
-        mem::swap(&mut self.0, &mut reduced);
+            let mut reduced = self.0.clone().into_iter()
+                .sorted_by(|a, b| { if a.is_subset_of(b) || b.is_subset_of(a) { Ordering::Equal }
+                                    else { a.cmp(b) } })
+                .into_iter()
+                .coalesce(|a, b| { if a.is_subset_of(&b) { Ok(b) }
+                                   else if b.is_subset_of(&a) { Ok(a) }
+                                   else { Err((a, b)) } })
+                .collect();
+            mem::swap(&mut self.0, &mut reduced);
+            Some(Element::Union(self))
+        }
     }
 }
 
