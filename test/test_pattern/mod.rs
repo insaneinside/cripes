@@ -179,7 +179,7 @@ mod class {
 
     use char_iter;
     use cripes::pattern::{Class, ClassMember, Wildcard};
-    use cripes::util::set::{Contains, IsSubsetOf, IsSupersetOf};
+    use cripes::util::set::{Contains, IsSubsetOf};
 
     #[test]
     fn test_contains() {
@@ -232,9 +232,10 @@ mod class {
     #[test]
     fn test_is_subset_of() {
         let cls1: Class<char> = FromIterator::from_iter(['x', 'y', 'z'].into_iter().cloned());
-        assert!(Wildcard.is_superset_of(&cls1));
+        assert!(cls1.is_subset_of(&Wildcard));
 
         let cls2: Class<char> = FromIterator::from_iter(['x', 'y'].into_iter().cloned());
         assert!(cls2.is_subset_of(&cls1));
+        assert!(! cls1.is_subset_of(&cls2));
     }
 }
