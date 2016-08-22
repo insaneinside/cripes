@@ -18,8 +18,8 @@
 //!
 //! ### `Distance` and `Step`
 //!
-//! If an atom is to be used in range-like constructs like
-//! [`ClassMember`][ClassMember]`::Range`, it must have implementations of the
+//! If an atom is to be used in range-like constructs like the `Range` variant
+//! of [`ClassMember`][ClassMember], it must have implementations of the
 //! [`Distance`][Distance] and [`Step`][Step] traits available.  These traits
 //! allow iterating over ranges of values of types that implement them.
 //!
