@@ -1,5 +1,14 @@
 //! Atoms and atomic traits.
 
+use std::{char, u8, u16, u32, u64, usize};
+use std::{ascii, cmp};
+use std::ops::Range;
+use std::fmt::{self, Debug};
+
+use super::{Class, Element, Sequence, Repetition, Union};
+
+use util::set::{self, Contains, IsSubsetOf};
+
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
@@ -216,7 +225,7 @@ macro_rules! BoC_ascii_ext_forward {
     });
 }
 
-impl std::ascii::AsciiExt for ByteOrChar {
+impl ascii::AsciiExt for ByteOrChar {
     type Owned = ByteOrChar;
     #[inline]
     fn is_ascii(&self) -> bool { BoC_ascii_ext_forward!(self, is_ascii) }
