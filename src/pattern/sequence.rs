@@ -20,6 +20,9 @@ pub struct Sequence<T: Atom>(seq_impl::Inner<T>);
 
 impl<T: Atom> Sequence<T> {
     /// Create a new sequence from the given vector.
+    ///
+    /// This method will **panic** if the given vector is not at least two
+    /// elements long.
     pub fn new(v: Vec<Element<T>>) -> Self {
         if v.len() < 2 {
             panic!("Sequences must have at least two elements");
