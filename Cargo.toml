@@ -18,11 +18,7 @@ name="cripes"
 path="src/lib.rs"
 
 [[test]]
-name="test"
-path="test/mod.rs"
-
-[[test]]
-name="compiletest"
+name="tests"
 path="tests/tests.rs"
 
 [dev-dependencies]

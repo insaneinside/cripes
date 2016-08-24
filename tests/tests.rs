@@ -1,4 +1,19 @@
+#![feature(inclusive_range_syntax)]
+#![feature(try_from)]
+
+#[cfg(feature = "regex")]
+extern crate regex_syntax;
+
+extern crate char_iter;
 extern crate compiletest_rs as compiletest;
+
+#[macro_use]
+extern crate cripes;
+
+mod util;
+mod pattern;
+
+
 
 use std::path::PathBuf;
 
