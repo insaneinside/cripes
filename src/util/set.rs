@@ -82,18 +82,8 @@ pub trait Difference<S> {
     /// Type of the result of computing this difference.
     type Output;
     /// Calculate the set-theoretic difference of this set with the one given.
-    fn difference(&self, other: &S) -> Self::Output;
+    fn difference(self, other: &S) -> Self::Output;
 }
-
-/// Trait for computing the [set-theoretic difference][setdiff] in-place, modifying
-/// the receiver.
-///
-/// [setdiff]: https://en.wikipedia.org/wiki/Complement_(set_theory)#Relative_complement
-pub trait Subtract<S> {
-    /// Remove the values in `other` from `self`, and return `self`.
-    fn subtract(&mut self, other: &S) -> &Self;
-}
-
 
 /// Utility for working with multiple sets as an aggregate.
 pub struct AggregateSet<'a, S: 'a> {
