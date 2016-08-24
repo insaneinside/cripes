@@ -119,8 +119,14 @@ macro_rules! is_subset_if_all_members_are_subsets {
 // This one should never happen, but we'll happily support whatever brain-dead
 // comparisons you want to try!
 is_subset_if_all_members_are_subsets! {
-    T, T, repetition;
+    T, T, atom;
     "A union is a subset of an atom if all members are subsets of that atom"}
+
+// Also unlikely.
+is_subset_if_all_members_are_subsets! {
+    T, Anchor<T>, anchor;
+    "A union is a subset of an anchor if all members of the union are subsets of the anchor"}
+
 
 is_subset_if_all_members_are_subsets! {
     T, Repetition<T>, repetition;
@@ -143,12 +149,12 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
             &Element::Repeat(ref r) => self.is_subset_of(r),
             &Element::Union(ref u) => self.is_subset_of(u),
             &Element::Atom(atom) => self.is_subset_of(&atom),
+            &Element::Anchor(a) => self.is_subset_of(&a),
 
             // A union is a subset of a wildcard if all members are
             // also subsets.
             &Element::Wildcard => self.iter().all(|m| m.is_subset_of(&Element::Wildcard)),
 
-            &Element::Anchor(_) => false,
         }
     }
 }

@@ -6,7 +6,7 @@ use std::fmt::{self, Debug, Display};
 use regex_syntax::Repeater;
 
 use util::set;
-use super::{Atom, Class, Element, Sequence, Union};
+use super::{Anchor, Atom, Class, Element, Sequence, Union};
 
 
 /// Repeated pattern element.
@@ -83,6 +83,13 @@ impl<T: Atom> set::IsSubsetOf<T> for Repetition<T> {
 }
 
 
+impl<T: Atom> set::IsSubsetOf<Anchor<T>> for Repetition<T> {
+    /// A repetition is never a subset of an anchor.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &Anchor<T>) -> bool {
+        false
+    }
+}
 impl<T: Atom> set::IsSubsetOf<Class<T>> for Repetition<T> {
     /// A repetition is never a subset of an atom class because a repetition's
     /// repeat count is guaranteed to never be equal to {1}.

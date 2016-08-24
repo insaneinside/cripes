@@ -7,7 +7,7 @@ use std::fmt::{self, Debug};
 use regex_syntax;
 use itertools::Itertools;
 
-use super::{Atom, ByteOrChar, Element, Repetition, Sequence, Union};
+use super::{Anchor, Atom, ByteOrChar, Element, Repetition, Sequence, Union};
 use super::{Distance, Step};
 use util::set::{self, Contains};
 
@@ -255,6 +255,15 @@ impl<T: Atom> set::IsSubsetOf<T> for Class<T> {
         self.contains(*atom) && self.polarity == Polarity::NORMAL && self.len() == 1
     }
 }
+
+impl<T: Atom> set::IsSubsetOf<Anchor<T>> for Class<T> {
+    /// A class is never a subset of an anchor.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &Anchor<T>) -> bool {
+        false
+    }
+}
+
 
 // FIXME [optimize] I suspect that we need some sort of specialized data
 // structure or clever algorithm in order to perform this test in a time better
