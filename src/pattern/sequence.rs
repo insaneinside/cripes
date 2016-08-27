@@ -4,7 +4,7 @@ use std::ops::Index;
 use std::iter::FromIterator;
 
 use util::set::{self, Contains};
-use super::{Atom, Class, Element, Repetition, Union};
+use super::{Anchor, Atom, Class, Element, Repetition, Union};
 use super::{Reduce, flatten_and_reduce};
 
 // To hide the implementation details, we wrap the type alias in
@@ -98,14 +98,30 @@ impl<T: Atom> set::Contains<T> for Sequence<T> {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<T> for Sequence<T> {
-    /// A sequence is a subset of a particular atom whenever the sequence has
-    /// length one, and the first element is a subset of that atom.
-    #[inline(always)]
-    fn is_subset_of(&self, atom: &T) -> bool {
-        self.len() == 1 && self[0].is_subset_of(atom)
-    }
-}
+// ----------------------------------------------------------------
+// set::IsSubsetOf
+
+macro_rules! is_subset_if_length_1_and_first_element_is_subset {
+    ($T: ident,$Other: ty, $name: ident; $doc: expr) => {
+        impl<$T: Atom> set::IsSubsetOf<$Other> for Sequence<$T> {
+            #[doc = $doc]
+            #[inline]
+            fn is_subset_of(&self, $name: &$Other) -> bool {
+                self.len() == 1 && self[0].is_subset_of($name)
+            }
+        }}}
+
+is_subset_if_length_1_and_first_element_is_subset! {
+    T, T, atom;
+    "A sequence is a subset of a particular atom whenever the sequence has length one, and the first element is a subset of that atom."}
+
+is_subset_if_length_1_and_first_element_is_subset! {
+    T, Anchor<T>, anchor;
+    "A sequence is a subset of an anchor whenever the sequence has length one, and the first element is a subset of that atom."}
+
+is_subset_if_length_1_and_first_element_is_subset! {
+    T, Class<T>, class;
+    "A sequence is a subset of an atom class whenever the sequence has length one, and the first element is a subset of that class."}
 
 impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Sequence<T> {
     /// A sequence `A` can be a subset of another sequence `B` *if* both have the
@@ -116,15 +132,6 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Sequence<T> {
     fn is_subset_of(&self, other: &Sequence<T>) -> bool {
         other.len() == self.len() &&
             self.iter().zip(other.iter()).all(|(u, v)| u.is_subset_of(v))
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Class<T>> for Sequence<T> {
-    /// A sequence is never a subset of an atom class because sequences are
-    /// guaranteed to contain at least two elements.
-    #[inline(always)]
-    fn is_subset_of(&self, _: &Class<T>) -> bool {
-        false
     }
 }
 
@@ -153,10 +160,13 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
             &Element::Union(ref u) => self.is_subset_of(u),
             &Element::Repeat(ref r) => self.is_subset_of(r),
 
-            &Element::Anchor(_) => false,
-            &Element::Atom(_) => false,
-            &Element::Class(_) => false,
-            &Element::Wildcard => false,
+            &Element::Anchor(ref a) => self.is_subset_of(a),
+            &Element::Atom(ref a) => self.is_subset_of(a),
+            &Element::Class(ref c) => self.is_subset_of(c),
+            &Element::Wildcard => self.len() == 1 && self[0].is_subset_of(elt),
+        }
+    }
+}
         }
     }
 }
