@@ -107,12 +107,12 @@ impl<T: Atom> set::IsSubsetOf<T> for Sequence<T> {
     }
 }
 
-// A sequence `A` can be a subset of another sequence `B` *if* both have the
-// same length and each element in `A` is a subset of the corresponding element
-// in `B`:
-//
-// A ⊂ B ⇔ |A|=|B|=n ∧ Aᵢ ⊂ Bᵢ ∀ i∈[0,n]
 impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Sequence<T> {
+    /// A sequence `A` can be a subset of another sequence `B` *if* both have the
+    /// same length and each element in `A` is a subset of the corresponding element
+    /// in `B`:
+    ///
+    /// A ⊂ B ⇔ |A|=|B|=n ∧ Aᵢ ⊂ Bᵢ ∀ i∈[0,n]
     fn is_subset_of(&self, other: &Sequence<T>) -> bool {
         other.len() == self.len() &&
             self.iter().zip(other.iter()).all(|(u, v)| u.is_subset_of(v))
