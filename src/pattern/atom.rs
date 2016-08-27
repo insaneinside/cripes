@@ -5,7 +5,7 @@ use std::{ascii, cmp};
 use std::ops::Range;
 use std::fmt::{self, Debug};
 
-use super::{Class, Element, Sequence, Repetition, Union};
+use super::{Anchor, Class, Element, Sequence, Repetition, Union};
 
 use util::set::{self, Contains, IsSubsetOf};
 
@@ -22,6 +22,14 @@ impl<T: Atom> set::IsSubsetOf<T> for T {
         self == other
     }
 }
+impl<T: Atom> set::IsSubsetOf<Anchor<T>> for T {
+    /// An atom is never a subset of an anchor.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &Anchor<T>) -> bool {
+        false
+    }
+}
+
 
 impl<T: Atom> set::IsSubsetOf<Class<T>> for T {
     #[inline(always)]
@@ -37,6 +45,13 @@ impl<T: Atom> set::IsSubsetOf<Union<T>> for T {
     }
 }
 
+impl<T: Atom> set::IsSubsetOf<Sequence<T>> for T {
+    #[inline]
+    fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
+        seq.len() == 1 && self.is_subset_of(&seq[0])
+    }
+}
+
 impl<T: Atom> set::IsSubsetOf<Repetition<T>> for T {
     #[inline]
     fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
@@ -49,16 +64,15 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
         match elt {
             &Element::Wildcard => true,
-            &Element::Atom(a) => *self == a,
+            &Element::Atom(a) => self.is_subset_of(&a),
 
             &Element::Class(ref class) => self.is_subset_of(class),
             &Element::Union(ref union) => self.is_subset_of(union),
             &Element::Repeat(ref rep) => self.is_subset_of(rep),
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
 
-            &Element::Sequence(_) |
-            &Element::Anchor(_)
-                => false,
+            &Element::Sequence(ref seq) => self.is_subset_of(seq),
+            &Element::Anchor(ref anch) => self.is_subset_of(anch)
         }
     }
 }
