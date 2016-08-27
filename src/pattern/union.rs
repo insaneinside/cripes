@@ -31,11 +31,13 @@ impl<T: Atom> Union<T> {
     }
 
     /// Fetch an iterator over the members of the union
+    #[inline]
     pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a Element<T>> {
         self.0.iter()
     }
 
     /// Get the number of members in the union
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -49,6 +51,7 @@ impl<T: Atom> Union<T> {
         self.0.into_iter().map(|elt| elt.map_atoms(&f)).collect()
     }
 
+    #[inline(always)]
     fn into_inner(self) -> union_impl::Inner<T> {
         self.0
     }
