@@ -1,5 +1,6 @@
 //! Pattern-sequence data structures and implementations.
 
+use std;
 use std::ops::Index;
 use std::iter::FromIterator;
 
@@ -78,6 +79,15 @@ impl<T: Atom> Index<usize> for Sequence<T> {
         &self.0[index]
     }
 
+}
+
+impl<T: Atom> IntoIterator for Sequence<T> {
+    type Item = Element<T>;
+    type IntoIter = std::vec::IntoIter<Element<T>>;
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
 }
 
 impl<T: Atom> FromIterator<Element<T>> for Sequence<T> {
