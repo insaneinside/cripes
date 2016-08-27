@@ -63,7 +63,7 @@ use std::fmt::{self,Display,Debug};
 #[cfg(feature="regex")]
 use regex_syntax::Expr;
 
-use util::set::{self, Contains};
+use util::set::{self, Contains, IsSubsetOf};
 
 mod atom;
 mod class;
@@ -104,11 +104,17 @@ pub trait Reduce {
 
 /// Non-consuming pattern matchers.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub enum Anchor/*<T: Atom>*/ {
+pub enum Anchor<T: Atom> {
     /// Beginning of the input buffer.
     StartOfInput,
     /// End of the input buffer.
     EndOfInput,
+
+    /// Dummy variant to allow us to use a type parameter, which is required
+    /// when implementing traits for which we want to use that type parameter
+    /// in an associated type (see the impl of `set::Difference` for `Anchor`).
+    #[doc(hidden)]
+    __PhantomData(std::marker::PhantomData<T>)
     /*/// Match the *FA with entry at the given node, ahead of the
     /// current position.
     LookAhead(Box<Transition<T>>),
@@ -117,6 +123,106 @@ pub enum Anchor/*<T: Atom>*/ {
     LookBehind(Box<Transition<T>>)*/
 }
 
+
+impl<T: Atom> Anchor<T> {
+    /// Dummy `map_atom` implementation.  Since `Anchor` doesn't actually
+    /// contain any atoms -- i.e. its type parameter exists solely to enable
+    /// the use of certain `set` traits¹ -- we simply transmute `self`.
+    ///
+    /// This may change in the future if/when additional anchor types
+    /// are added.
+    ///
+    /// ¹: In the partial monomorphization of `set::Difference` used in this
+    ///    module, the associated type `Output` is `Element<T>` -- hence the
+    ///    need for a type parameter.
+    #[doc(hidden)]
+    pub fn map_atoms<U, F>(self, f: F) -> Anchor<U>
+        where F: Fn(T) -> U,
+              U: Atom
+    {
+        std::mem::transmute(self)
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Element<T>> for Anchor<T> {
+    fn is_subset_of(&self, elt: &Element<T>) -> bool {
+        match elt {
+            &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
+            &Element::Sequence(ref s) => self.is_subset_of(s),
+            &Element::Union(ref u) => self.is_subset_of(u),
+            &Element::Repeat(ref r) => self.is_subset_of(r),
+
+            &Element::Anchor(ref a) => self.is_subset_of(a),
+            &Element::Atom(ref a) => self.is_subset_of(a),
+            &Element::Class(ref c) => self.is_subset_of(c),
+            &Element::Wildcard => false,
+        }
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<T> for Anchor<T> {
+    /// An anchor is never a subset of an atom.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &T) -> bool {
+        false
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Anchor<T>> for Anchor<T> {
+    /// One anchor is a subset of another if both match the same conditions.
+    #[inline]
+    fn is_subset_of(&self, anchor: &Self) -> bool {
+        self == anchor
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Class<T>> for Anchor<T> {
+    /// An anchor is never a subset of a class of atoms, because currently
+    /// anchors always describes conditions outside the scope of an atom.
+    #[inline(always)]
+    fn is_subset_of(&self, _: &Class<T>) -> bool {
+        false
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Union<T>> for Anchor<T> {
+    /// An anchor is a subset of a union if it is a subset of any member of
+    /// the union.
+    #[inline]
+    fn is_subset_of(&self, union: &Union<T>) -> bool {
+        union.iter().any(|elt| *elt == Element::Anchor(*self))
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Anchor<T> {
+    /// An anchor is a subset of a sequence if that sequence has length one and
+    /// the anchor is a subset of the sequence's first element.
+    #[inline]
+    fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
+        seq.len() == 1 && self.is_subset_of(&seq[0])
+    }
+}
+
+impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Anchor<T> {
+    /// An anchor is a subset of a repetition if it is a subset of the repeated
+    /// element and the repeat-count includes 1.
+    #[inline]
+    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
+        self.is_subset_of(rep.element()) && rep.count().contains(1)
+    }
+}
+
+impl<T: Atom, U> set::Difference<U> for Anchor<T>
+    where Anchor<T>: set::IsSubsetOf<U>
+{
+    type Output = Element<T>;
+
+    #[inline]
+    fn difference(self, other: &U) -> Self::Output {
+        if self.is_subset_of(other) { Element::empty() }
+        else { self.into() }
+    }
+}
 
 // ----------------------------------------------------------------
 // Element
@@ -134,7 +240,7 @@ pub enum Element<T: Atom> {
 
     /// Condition that must match the current input for pattern-matching to
     /// continue
-    Anchor(Anchor/*<T>*/),
+    Anchor(Anchor<T>),
 
     /// Sequence or concatenation of elements.
     Sequence(Sequence<T>),
@@ -309,7 +415,7 @@ impl<T: Atom> Element<T> {
             Element::Wildcard => Element::Wildcard,
             Element::Atom(a) => Element::Atom(f(a)),
             Element::Class(c) => Element::Class(c.map_atoms(f)),
-            Element::Anchor(a) => Element::Anchor(a),
+            Element::Anchor(a) => Element::Anchor(a.map_atoms(f)),
             Element::Sequence(s) => Element::Sequence(s.map_atoms(f)),
             Element::Union(u) => Element::Union(u.map_atoms(f)),
             Element::Repeat(rep) => Element::Repeat(rep.map_atoms(f)),
@@ -359,7 +465,7 @@ macro_rules! element_is_subset_of_impl {
                     &Element::Union(ref u) => u.is_subset_of($name),
                     &Element::Tagged{ref element, ..} => element.is_subset_of($name),
                     &Element::Repeat(ref r) => r.is_subset_of($name),
-                    &Element::Anchor(_) => false,
+                    &Element::Anchor(a) => a.is_subset_of($name)
                 }
             }
         }
@@ -370,6 +476,14 @@ element_is_subset_of_impl! {
     T, T, atom, self;
 
     &Element::Atom(a) => a.is_subset_of(atom),
+    &Element::Wildcard
+        => false
+}
+
+element_is_subset_of_impl! {
+    T, Anchor<T>, anchor, self;
+
+    &Element::Atom(_) |
     &Element::Wildcard
         => false
 }
@@ -583,9 +697,11 @@ macro_rules! element_from_variant_impl {
     };
 }
 
+element_from_variant_impl!(T, T, Atom);
+element_from_variant_impl!(T, Class<T>, Class);
+element_from_variant_impl!(T, Anchor<T>, Anchor);
 element_from_variant_impl!(T, Sequence<T>, Sequence);
 element_from_variant_impl!(T, Union<T>, Union);
-element_from_variant_impl!(T, Class<T>, Class);
 element_from_variant_impl!(T, Repetition<T>, Repeat);
 
 impl Display for Element<char> {
