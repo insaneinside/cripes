@@ -73,6 +73,9 @@ impl<T: Atom> set::Contains<T> for Repetition<T> {
 }
 
 
+// ----------------------------------------------------------------
+// set::IsSubsetOf
+
 impl<T: Atom> set::IsSubsetOf<T> for Repetition<T> {
     /// A repetition is never a subset of an atom because a repetition's repeat
     /// count is guaranteed to never be equal to {1}.
@@ -129,19 +132,16 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Repetition<T> {
 impl<T: Atom> set::IsSubsetOf<Element<T>> for Repetition<T> {
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
         match elt {
-            &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
-                     &Element::Sequence(ref s) => self.is_subset_of(s),
-            &Element::Repeat(ref r) => self.is_subset_of(r),
-
-            &Element::Union(ref u) => self.is_subset_of(u),
-
             // A repetition cannot be a subset of any single-atom pattern
             // because the repeat count is guaranteed to be a superset of {1}.
             &Element::Wildcard => false,
-            &Element::Atom(_) => false,
-            &Element::Class(_) => false,
-
-            &Element::Anchor(_) => false,
+            &Element::Anchor(ref a) => self.is_subset_of(a),
+            &Element::Atom(ref a) => self.is_subset_of(a),
+            &Element::Class(ref c) => self.is_subset_of(c),
+            &Element::Sequence(ref s) => self.is_subset_of(s),
+            &Element::Union(ref u) => self.is_subset_of(u),
+            &Element::Repeat(ref r) => self.is_subset_of(r),
+            &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
         }
     }
 }
