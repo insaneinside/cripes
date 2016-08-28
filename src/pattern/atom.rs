@@ -13,9 +13,6 @@ use util::set::{self, Contains, IsSubsetOf};
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 impl<T> Atom for T where T: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
 
-// ----------------------------------------------------------------
-// set::IsSubsetOf
-
 impl<T: Atom> set::IsSubsetOf<T> for T {
     #[inline(always)]
     fn is_subset_of(&self, other: &T) -> bool {
@@ -77,22 +74,6 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
     }
 }
 
-// ----------------------------------------------------------------
-// set::Difference
-
-impl<T: Atom, U> set::Difference<U> for T
-    where T: set::IsSubsetOf<U> {
-    type Output = Element<T>;
-    fn difference(self, other: &U) -> Self::Output {
-        if self.is_subset_of(other) {
-            Element::empty()
-        } else {
-            Element::Atom(self)
-        }
-    }
-}
-
-// ----------------------------------------------------------------
 
 /// Trait for types whose values can be stepped through by increment/decrement
 /// operatons
