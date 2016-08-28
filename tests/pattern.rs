@@ -44,7 +44,7 @@ mod sequence {
         assert_eq!(None, Sequence::<char>::from_iter(iter::empty()).reduce());
 
         // Unit-length sequences should reduce to their only element.
-        assert_eq!(Some(Element::Wildcard), Sequence::<char>::new(vec![Element::Wildcard]).reduce());
+        assert_eq!(Some(Element::Wildcard), Sequence::<char>::from_iter(vec![Element::Wildcard]).reduce());
     }
 
     #[test]
