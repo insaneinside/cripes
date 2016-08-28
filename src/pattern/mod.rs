@@ -136,11 +136,15 @@ impl<T: Atom> Anchor<T> {
     ///    module, the associated type `Output` is `Element<T>` -- hence the
     ///    need for a type parameter.
     #[doc(hidden)]
-    pub fn map_atoms<U, F>(self, f: F) -> Anchor<U>
+    pub fn map_atoms<U, F>(self, _: F) -> Anchor<U>
         where F: Fn(T) -> U,
               U: Atom
     {
-        std::mem::transmute(self)
+        match self {
+            Anchor::StartOfInput => Anchor::StartOfInput,
+            Anchor::EndOfInput => Anchor::EndOfInput,
+            _ => unreachable!()
+        }
     }
 }
 
@@ -190,7 +194,7 @@ impl<T: Atom> set::IsSubsetOf<Union<T>> for Anchor<T> {
     /// the union.
     #[inline]
     fn is_subset_of(&self, union: &Union<T>) -> bool {
-        union.iter().any(|elt| *elt == Element::Anchor(*self))
+        union.iter().any(|elt| match elt { &Element::Anchor(ref t) if t == self => true, _ => false })
     }
 }
 
@@ -209,18 +213,6 @@ impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Anchor<T> {
     #[inline]
     fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
         self.is_subset_of(rep.element()) && rep.count().contains(1)
-    }
-}
-
-impl<T: Atom, U> set::Difference<U> for Anchor<T>
-    where Anchor<T>: set::IsSubsetOf<U>
-{
-    type Output = Element<T>;
-
-    #[inline]
-    fn difference(self, other: &U) -> Self::Output {
-        if self.is_subset_of(other) { Element::empty() }
-        else { self.into() }
     }
 }
 
@@ -465,7 +457,7 @@ macro_rules! element_is_subset_of_impl {
                     &Element::Union(ref u) => u.is_subset_of($name),
                     &Element::Tagged{ref element, ..} => element.is_subset_of($name),
                     &Element::Repeat(ref r) => r.is_subset_of($name),
-                    &Element::Anchor(a) => a.is_subset_of($name)
+                    &Element::Anchor(ref a) => a.is_subset_of($name)
                 }
             }
         }
@@ -539,12 +531,6 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
     }
 }
 
-
-impl<T: Atom> From<T> for Element<T> {
-    fn from(atom: T) -> Self {
-        Element::Atom(atom)
-    }
-}
 
 #[cfg(feature = "regex")]
 #[allow(missing_docs)]

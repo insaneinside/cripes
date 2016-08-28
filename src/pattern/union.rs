@@ -7,7 +7,7 @@ use std::iter::FromIterator;
 use itertools::Itertools;
 
 use util::set::{self, IsSubsetOf};
-use super::{Atom, Class, Element, Repetition, Sequence};
+use super::{Anchor, Atom, Class, Element, Repetition, Sequence};
 use super::{Reduce, flatten_and_reduce};
 
 // To hide the implementation details, we wrap the type alias in
@@ -152,7 +152,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
             &Element::Repeat(ref r) => self.is_subset_of(r),
             &Element::Union(ref u) => self.is_subset_of(u),
             &Element::Atom(atom) => self.is_subset_of(&atom),
-            &Element::Anchor(a) => self.is_subset_of(&a),
+            &Element::Anchor(ref a) => self.is_subset_of(a),
 
             // A union is a subset of a wildcard if all members are
             // also subsets.
