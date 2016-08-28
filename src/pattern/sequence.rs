@@ -177,6 +177,3 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
         }
     }
 }
-        }
-    }
-}
