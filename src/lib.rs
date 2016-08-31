@@ -30,11 +30,6 @@
 // feature "debug".
 #![feature(stmt_expr_attributes)]
 
-// `iter_arith_traits` is used to implement `std::iter::Sum` on a type in
-// `pattern::codegen` that stores a predicted byte count or range of byte
-// counts needed to match a particular atom.
-#![feature(iter_arith_traits)]
-
 // `TryFrom` is used when converting `regex_syntax::Expr`s to structural
 // patterns, because there are some features of regex_syntax that we simply
 // don't support.
