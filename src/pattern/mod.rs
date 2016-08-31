@@ -53,17 +53,16 @@
 //! [set-IsSubsetOf]: ../util/set/trait.IsSubsetOf.html
 
 use std;
-use std::{char, u8, u16, u32, u64, usize};
-use std::{ptr, cmp, mem};
+use std::{char, u8, u32, usize};
+use std::{ptr, mem};
 use std::convert::{TryFrom, TryInto};
-use std::ops::Range;
 use std::iter::{FromIterator,IntoIterator};
 use std::fmt::{self,Display,Debug};
 
 #[cfg(feature="regex")]
 use regex_syntax::Expr;
 
-use util::set::{self, Contains, IsSubsetOf};
+use util::set::{self, Contains};
 
 mod atom;
 mod class;

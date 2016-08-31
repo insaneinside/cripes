@@ -3,11 +3,11 @@
 use std::{char, u8, u16, u32, u64, usize};
 use std::{ascii, cmp};
 use std::ops::Range;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 
 use super::{Anchor, Class, Element, Sequence, Repetition, Union};
 
-use util::set::{self, Contains, IsSubsetOf};
+use util::set::{self, Contains};
 
 /// Trait-bounds requirements for atomic values in a pattern.
 pub trait Atom: Debug + Copy + Clone + Eq + Ord + Distance + Step {}
