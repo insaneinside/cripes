@@ -12,6 +12,15 @@ use std::iter::FromIterator;
 use super::{Atom, Class, ClassMember};
 
 // ================================================================
+/// Trait for atom types that can be converted to byte sequences.
+pub trait Bytes<'a> {
+    /// Iterator type returned by `bytes`.
+    type Iter: 'a + Iterator<Item=u8>;
+
+    /// Fetch an iterator over "self" as a series of bytes.
+    fn bytes(&self) -> Self::Iter;
+}
+
 /// Interface for types which can bound the number of bytes required to match
 /// a particular instance of themselves.
 pub trait SizedRead {
@@ -107,6 +116,12 @@ impl From<Range<usize>> for ReadSize {
 // ----------------------------------------------------------------
 // Implementations
 
+impl<'a> Bytes<'a> for u8 {
+    type Iter = iter::Once<u8>;
+    fn bytes(&self) -> Self::Iter {
+        iter::once(*self)
+    }
+}
 
 // This table was copied from the Rust source tree,
 // file "src/libcore/str/mod.rs".
@@ -129,6 +144,13 @@ static UTF8_CHAR_WIDTH: [u8; 256] = [
 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, // 0xEF
 4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, // 0xFF
 ];
+
+impl<'a> Bytes<'a> for char {
+    type Iter = char::EncodeUtf8;
+    fn bytes(&self) -> Self::Iter {
+        self.encode_utf8()
+    }
+}
 
 impl SizedRead for char {
     #[inline]
