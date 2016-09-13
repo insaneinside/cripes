@@ -240,7 +240,7 @@ fn test_readable_char() {
 
 #[cfg(test)]
 #[test]
-fn test_sizedread_transition() {
+fn test_sizedread() {
     assert_eq!(ReadSize::Exact(1), 'a'.read_size());
     assert_eq!(ReadSize::Exact(3), '✓'.read_size());
     assert_eq!(ReadSize::Range(1, 3), Class::from_iter(['x', 'y', '⚔'].into_iter().cloned()).read_size());
