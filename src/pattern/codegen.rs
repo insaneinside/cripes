@@ -123,6 +123,22 @@ impl<'a> Bytes<'a> for u8 {
     }
 }
 
+
+impl SizedRead for u8 {
+    #[inline(always)]
+    fn read_size(&self) -> ReadSize {
+        ReadSize::Exact(1)
+    }
+}
+
+impl ReadToBuffer for u8 {
+    #[inline(always)]
+    fn read_to_buffer<R>(r: &mut R, dest: &mut [u8], max_count: usize) -> io::Result<usize>
+        where R: io::Read {
+        r.read(&mut dest[0..max_count])
+    }
+}
+
 // This table was copied from the Rust source tree,
 // file "src/libcore/str/mod.rs".
 // https://tools.ietf.org/html/rfc3629
