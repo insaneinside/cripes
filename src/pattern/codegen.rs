@@ -65,7 +65,7 @@ impl ReadSize {
         }
     }
 
-}    
+}
 
 impl iter::Sum<ReadSize> for ReadSize {
     #[inline]
@@ -111,7 +111,7 @@ impl From<Range<usize>> for ReadSize {
         else { ReadSize::Exact(r.start) }
     }
 }
-        
+
 
 // ----------------------------------------------------------------
 // Implementations
@@ -138,6 +138,8 @@ impl ReadToBuffer for u8 {
         r.read(&mut dest[0..max_count])
     }
 }
+
+// ----------------------------------------------------------------
 
 // This table was copied from the Rust source tree,
 // file "src/libcore/str/mod.rs".
@@ -190,7 +192,7 @@ impl ReadToBuffer for char {
         }
         Ok(i)
     }
-           
+
 }
 
 
@@ -281,4 +283,3 @@ impl<T> SizedRead for Class<T>
         (min..(max + 1)).into()
     }
 }
-
