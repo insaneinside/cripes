@@ -547,6 +547,11 @@ mod regex_conv {
     }
 }
 use self::regex_conv::*;
+macro_rules! unsupported {
+    ($e: expr, $s: expr) => {
+        Err(RegexConvErrorKind::UnsupportedFeature($e, $s.into()).into())
+    }
+}
 
 /// Macro for composing the match in a `From<regex_syntax::Expr> for
 /// Element<...>` impl.
@@ -574,8 +579,8 @@ macro_rules! element_from_expr_impl {
                                     $($built)*
                                     Expr::Literal{chars, casei} => {
                                         if casei {
-                                            Err(RegexConvErrorKind::UnsupportedFeature(Expr::Literal{chars: chars, casei: casei},
-                                                                                       "case-insensitive matching".into()).into())
+                                            unsupported!(Expr::Literal{chars: chars, casei: casei},
+                                                         "case-insensitive matching")
                                         } else if chars.len() > 1 {
                                             Ok(Sequence::from_iter(chars.into_iter().map(|c| c.into())).into())
                                         } else {
@@ -596,8 +601,8 @@ macro_rules! element_from_expr_impl {
                                     $($built)*
                                     Expr::LiteralBytes{bytes, casei} => {
                                         if casei {
-                                            Err(RegexConvErrorKind::UnsupportedFeature(Expr::LiteralBytes{bytes: bytes, casei: casei},
-                                                                                       "case-insensitive matching".into()).into())
+                                            unsupported!(Expr::LiteralBytes{bytes: bytes, casei: casei},
+                                                         "case-insensitive matching")
                                         } else if bytes.len() > 1 {
                                             Ok(Element::Sequence(Sequence::from_iter(bytes.into_iter().map(|b| b.into()))))
                                         } else {
@@ -624,8 +629,7 @@ macro_rules! element_from_expr_impl {
                                     } },
                                 Expr::Repeat{e, r, greedy} => {
                                     if ! greedy {
-                                        Err(RegexConvErrorKind::UnsupportedFeature(Expr::Repeat{e: e, r: r, greedy: greedy},
-                                                                                   "non-greedy repetition".into()).into())
+                                        unsupported!(Expr::Repeat{e: e, r: r, greedy: greedy}, "non-greedy repetition")
                                     } else {
                                         match (*e).try_into() {
                                             Ok(elt) => Ok(Element::Repeat(Repetition::new(elt, r.into()))),
@@ -642,7 +646,7 @@ macro_rules! element_from_expr_impl {
                                         Ok(v) => Ok(Element::Union(Union::new(v))),
                                         Err(e) => Err(e)
                                     } },
-                                Expr::Empty => Err(RegexConvErrorKind::UnsupportedFeature(Expr::Empty, "empty expressions".into()).into()),
+                                Expr::Empty => unsupported!(Expr::Empty, "empty expressions"),
                                 Expr::StartText => Ok(Element::Anchor(Anchor::StartOfInput)),
                                 Expr::EndText => Ok(Element::Anchor(Anchor::EndOfInput)),
                                 /*Expr::StartLine => unimplemented!(),
