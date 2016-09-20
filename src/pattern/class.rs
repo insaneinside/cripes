@@ -332,7 +332,7 @@ where ClassMember<T>: From<U> {
 
 macro_rules! impl_class_from {
     ($T: ty, $from: ty) => {
-        impl<'a> From<$from> for Class<$T> {
+        impl From<$from> for Class<$T> {
             fn from(c: $from) -> Self {
                 Self::new(Polarity::NORMAL,
                           c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
