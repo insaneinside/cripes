@@ -4,6 +4,8 @@
 #![crate_name = "cripes"]
 #![warn(missing_docs)]
 
+// `unicode` is used for encoding `char`s to UTF-8 in `pattern/codegen.rs`.
+#![feature(unicode)]
 
 // These features (`alloc`, `heap_api`, `unsize`, `coerce_unsized`, and
 // `core_intrinsics`) are used in the implementation of
