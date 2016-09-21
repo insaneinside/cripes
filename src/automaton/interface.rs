@@ -6,33 +6,61 @@ use util::set;
 use util::graph::interface::Id;
 use pattern::Atom;
 
-/// Trait bounds for any type used as a transition in an automaton
-pub trait Transition: Clone + Debug + Eq + Ord + set::Contains<<Self as Transition>::Atom> + set::IsSubsetOf<Self> {
+/// Trait bounds for any type used for input to an automaton state
+pub trait Input: Clone + Debug + Eq + Ord + set::Contains<<Self as Input>::Atom> + set::IsSubsetOf<Self> {
     /// Smallest transition unit used.
     type Atom: Atom;
 }
 
+/// Metadata-bearing transition from one automaton state to another.
+pub trait Transition: Clone + Debug + Eq {
+    /// Input type that triggers this transition.
+    type Input: Input;
 
+    /// Fetch the input on which the transition is followed.
+    fn input(&self) -> &Self::Input;
+}
+
+/// Trait for types that contain some specification of actions to be performed.
+pub trait Actions {
+    /// Action type
+    type Action;
+
+    /// Fetch a slice over the contained actions.
+    fn actions(&self) -> &[Self::Action];
+}
 
 /// Interface for automaton implementations
 pub trait Automaton<'a, A: 'a + Atom> {
-    /// Type used to identify individual states.
-    type StateId: Id;
-
     /// Concrete type used to represent automaton states
     type State;
 
-    /// Concrete type that represents possible inputs to a given state.
-    type Transition: 'a + Transition<Atom=A>;
+    /// Type used to identify individual states.
+    type StateId: Id;
 
     /// Iterator over the IDs of states in the automaton.
     type StateIdsIter: Iterator<Item=Self::StateId>;
 
+    /// Concrete type used to represent a single input to a given state.
+    type Input: 'a + Input<Atom=A>;
+
     /// Iterator over the possible inputs for a state.
-    type InputsIter: Iterator<Item=&'a Self::Transition>;
+    type InputsIter: Iterator<Item=&'a Self::Input>;
+
+    /// Type used to store the input and any relevant metadata for a transition
+    /// from one state to another.
+    type Transition: Transition<Input=Self::Input>;
+
+    /// Type used to identify individual transitions.
+    type TransitionId: Id;
+
+    /// Iterator over the IDs of transitions in the automaton.
+    type TransitionIdsIter: Iterator<Item=Self::TransitionId>;
 
     /// Iterator over the possible outgoing transitions for a state.
-    type TransitionsIter: Iterator<Item=(&'a Self::Transition, Self::StateId)>;
+    type TransitionsIter: Iterator<Item=(Self::TransitionId, Self::StateId)>;
+
+    // --------------------------------
 
     /// Get the number of states in the automaton.
     fn state_count(&self) -> usize;
@@ -49,9 +77,20 @@ pub trait Automaton<'a, A: 'a + Atom> {
     /// Fetch an iterator over the valid inputs for a given state.
     fn state_inputs(&'a self, s: Self::StateId) -> Self::InputsIter;
 
-    /// Fetch an iterator over the (transition, next state) pairs for
+    /// Fetch an iterator over the `(transition_id, next_state_id)` pairs for
     /// a given state.
     fn state_transitions(&'a self, s: Self::StateId) -> Self::TransitionsIter;
+
+    // --------------------------------
+
+    /// Get the number of transitions in the automaton.
+    fn transition_count(&self) -> usize;
+
+    /// Get an iterator over the IDs of all transitions in the automaton
+    fn transition_ids(&self) -> Self::TransitionIdsIter;
+
+    /// Get a reference to a specific transition.
+    fn transition(&self, id: Self::TransitionId) -> &Self::Transition;
 }
 
 /// Interface for deterministic automatons.
