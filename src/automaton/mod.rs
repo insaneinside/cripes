@@ -20,8 +20,11 @@ use bit_set::BitSet;
 #[cfg(feature="regex")]
 use regex_syntax;
 
+use pattern::{Atom, ByteOrChar, Element, RepeatCount};
+#[cfg(feature = "pattern_class")]
+use pattern::Class;
+
 use util::set::{self, Contains};
-use pattern::{Atom, ByteOrChar, Class, Element, RepeatCount};
 use util::graph::interface::*;
 use util::graph::{self,Build, Builder, Target, WeightedNode};//, Graph as Graphlike, DirectedGraph, Id as GraphID};
 
@@ -50,6 +53,7 @@ pub enum Input<A: Atom> {
     Atom(A),
 
     /// Transition on any one of a class of atoms.
+    #[cfg(feature = "pattern_class")]
     Class(Class<A>),
 
     /// Transition on any atom that does _not_ match the contained input.
@@ -103,12 +107,14 @@ impl<A: Atom> From<Element<A>> for Input<A> {
         match elt {
             Element::Wildcard => Input::Any,
             Element::Atom(a) => Input::Atom(a),
+            #[cfg(feature = "pattern_class")]
             Element::Class(a) => Input::Class(a),
             Element::Not(elt) => Input::Not(Box::new((*elt).into())),
             _ => panic!("Unexpected element type for conversion to NFA transition: {:?}", elt)
         }
     }
 }
+
 impl<A: Atom> set::IsSubsetOf<Transition<A>> for Transition<A> {
     #[inline]
     fn is_subset_of(&self, other: &Self) -> bool {
@@ -127,6 +133,7 @@ impl<A: Atom> set::IsSubsetOf<Input<A>> for Input<A> {
                 #[cfg(feature = "pattern_class")]
                 &Input::Class(ref c) => c.contains(a),
                 &Input::Not(ref input) => ! self.is_subset_of(&**input) },
+            #[cfg(feature = "pattern_class")]
             &Input::Class(ref c) => match other {
                 &Input::Any => true,
                 // A class CAN be a subset of an atom -- if the atom is the
@@ -152,6 +159,7 @@ impl<A: Atom> set::Contains<A> for Input<A> {
         match self {
             &Input::Any => true,
             &Input::Atom(a) => atom == a,
+            #[cfg(feature = "pattern_class")]
             &Input::Class(ref c) => c.contains(atom),
             &Input::Not(ref input) => ! input.contains(atom),
         }
@@ -552,6 +560,7 @@ impl<T> Build<GraphImpl<T>> for GraphRepr<T>
                 o
             },
 
+            #[cfg(feature = "pattern_class")]
             Element::Class(_)
                 => b.append_edge(next, input.into(), Self::target_node),
             Element::Wildcard |

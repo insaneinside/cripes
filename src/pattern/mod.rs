@@ -65,18 +65,20 @@ use regex_syntax::Expr;
 use util::set::{self, Contains};
 
 mod atom;
-mod class;
 mod union;
 mod sequence;
 mod repetition;
+#[cfg(feature = "pattern_class")]
+mod class;
 
 pub mod codegen;
 
 pub use self::atom::*;
-pub use self::class::*;
 pub use self::union::*;
 pub use self::sequence::*;
 pub use self::repetition::*;
+#[cfg(feature = "pattern_class")]
+pub use self::class::*;
 
 /// Single-element pattern that matches atom.
 ///
@@ -157,6 +159,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Anchor<T> {
 
             &Element::Anchor(ref a) => self.is_subset_of(a),
             &Element::Atom(ref a) => self.is_subset_of(a),
+            #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => self.is_subset_of(c),
             &Element::Wildcard => false,
             &Element::Not(ref element) => ! self.is_subset_of(&**element),
@@ -180,6 +183,7 @@ impl<T: Atom> set::IsSubsetOf<Anchor<T>> for Anchor<T> {
     }
 }
 
+#[cfg(feature = "pattern_class")]
 impl<T: Atom> set::IsSubsetOf<Class<T>> for Anchor<T> {
     /// An anchor is never a subset of a class of atoms, because currently
     /// anchors always describes conditions outside the scope of an atom.
@@ -228,6 +232,7 @@ pub enum Element<T: Atom> {
     Atom(T),
 
     /// Any one of a set of atoms
+    #[cfg(feature = "pattern_class")]
     Class(Class<T>),
 
     /// Condition that must match the current input for pattern-matching to
@@ -408,6 +413,7 @@ impl<T: Atom> Element<T> {
         match self {
             Element::Wildcard => Element::Wildcard,
             Element::Atom(a) => Element::Atom(f(a)),
+            #[cfg(feature = "pattern_class")]
             Element::Class(c) => Element::Class(c.map_atoms(f)),
             Element::Anchor(a) => Element::Anchor(a.map_atoms(f)),
             Element::Sequence(s) => Element::Sequence(s.map_atoms(f)),
@@ -444,6 +450,7 @@ impl<T: Atom> set::Contains<T> for Element<T> {
         match self {
             &Element::Wildcard => true,
             &Element::Atom(a) => atom == a,
+            #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => c.contains(atom),
             &Element::Sequence(ref s) => s.contains(atom),
             &Element::Union(ref u)  => u.contains(atom),
@@ -461,6 +468,7 @@ macro_rules! element_is_subset_of_impl {
             fn is_subset_of(&$s, $name: &$Tp) -> bool {
                 match $s {
                     $($arms)+,
+                    #[cfg(feature = "pattern_class")]
                     &Element::Class(ref c) => c.is_subset_of($name),
                     &Element::Sequence(ref s) => s.is_subset_of($name),
                     &Element::Union(ref u) => u.is_subset_of($name),
@@ -477,7 +485,7 @@ macro_rules! element_is_subset_of_impl {
 element_is_subset_of_impl! {
     T, T, atom, self;
 
-    &Element::Atom(a) => a.is_subset_of(atom),
+    &Element::Atom(a) => a == *atom,//a.is_subset_of(atom),
     &Element::Wildcard
         => false
 }
@@ -497,6 +505,8 @@ element_is_subset_of_impl! {
     &Element::Wildcard
         => self.is_subset_of(rep.element()) && rep.count().contains(1)
 }
+
+#[cfg(feature = "pattern_class")]
 element_is_subset_of_impl! {
     T, Class<T>, class, self;
     &Element::Atom(a) => class.contains(a),
@@ -522,6 +532,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
                 &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
                 &Element::Repeat(ref rep) => self.is_subset_of(rep.element()) && rep.count().contains(1),
                 &Element::Union(ref union) => union.iter().any(|m| self.is_subset_of(m)),
+                #[cfg(feature = "pattern_class")]
                 &Element::Class(ref class) => class.is_empty() && class.polarity() == Polarity::INVERTED,
 
                 &Element::Wildcard => true,
@@ -533,6 +544,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
                 &Element::Not(ref element) => ! self.is_subset_of(&**element),
             },
             &Element::Atom(a) => a.is_subset_of(other),
+            #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => c.is_subset_of(other),
             &Element::Sequence(ref s) => s.is_subset_of(other),
             &Element::Union(ref u) => u.is_subset_of(other),
@@ -601,14 +613,26 @@ macro_rules! element_from_expr_impl {
                                             Ok(Element::Atom(chars[0].into()))
                                         } },
                                     Expr::AnyChar => Ok(Element::Wildcard),
-                                    Expr::AnyCharNoNL =>  Ok(Element::Class(Class::new(Polarity::INVERTED, [ClassMember::Atom('\n'.into())].iter().cloned()))),
+                                    Expr::AnyCharNoNL =>  Ok(Element::not(Element::Atom('\n'.into()))),
+                                    #[cfg(feature = "pattern_class")]
                                     Expr::Class(c) => {
-                                        let first = c.iter().cloned().nth(0).unwrap();
-                                        if c.len() > 1 || first.start != first.end {
-                                            Ok(Element::Class(c.into()))
+                                        if c.is_empty() {
+                                            unsupported!(Expr::Class(c), "The empty class expression")
                                         } else {
-                                            Ok(Element::Atom(first.start.into()))
-                                        } });
+                                            let first = c.iter().cloned().nth(0).unwrap();
+                                            if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
+                                            else { Ok(Element::Atom(first.start.into())) }
+                                        } },
+                                    #[cfg(not(feature = "pattern_class"))]
+                                    Expr::Class(c) => {
+                                        if c.is_empty() {
+                                            unsupported!(Expr::Class(c), "The empty class expression")
+                                        } else {
+                                            let first = c.iter().cloned().nth(0).unwrap();
+                                            if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
+                                            else { Ok(Element::Atom(first.start.into())) }
+                                        } },
+        );
     );
     ($T:ty => (_byte $($rest:ident)*); $($built:tt)*) => (
         element_from_expr_impl!($T => ( $($rest)* );
@@ -623,11 +647,26 @@ macro_rules! element_from_expr_impl {
                                             Ok(Element::Atom(bytes[0].into()))
                                         } },
                                     Expr::AnyByte => Ok(Element::Wildcard),
-                                    Expr::AnyByteNoNL => Ok(Element::Class(Class::new(Polarity::INVERTED, [ClassMember::Atom(b'\n'.into())].iter().cloned()))),
+                                    Expr::AnyByteNoNL =>  Ok(Element::not(Element::Atom(b'\n'.into()))),
+                                    #[cfg(feature = "pattern_class")]
                                     Expr::ClassBytes(c) => {
-                                        let first = c.iter().cloned().nth(0).unwrap();
-                                        if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
-                                        else { Ok(Element::Atom(first.start.into())) } });
+                                        if c.is_empty() {
+                                            unsupported!(Expr::Class(c), "The empty class expression")
+                                        } else {
+                                            let first = c.iter().cloned().nth(0).unwrap();
+                                            if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
+                                            else { Ok(Element::Atom(first.start.into())) }
+                                        } },
+                                    #[cfg(not(feature = "pattern_class"))]
+                                    Expr::ClassBytes(c) => {
+                                        if c.is_empty() {
+                                            unsupported!(Expr::ClassBytes(c), "The empty class expression")
+                                        } else {
+                                            let first = c.iter().cloned().nth(0).unwrap();
+                                            if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
+                                            else { Ok(Element::Atom(first.start.into())) }
+                                        } },
+        );
     );
     ($T:ty => (_common $($rest:ident)*); $($built:tt)*) => (
         element_from_expr_impl!($T => ( $($rest)* ) ;
@@ -701,6 +740,7 @@ macro_rules! element_from_variant_impl {
 }
 
 element_from_variant_impl!(T, T, Atom);
+#[cfg(feature = "pattern_class")]
 element_from_variant_impl!(T, Class<T>, Class);
 element_from_variant_impl!(T, Anchor<T>, Anchor);
 element_from_variant_impl!(T, Sequence<T>, Sequence);

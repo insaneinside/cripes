@@ -28,7 +28,9 @@ macro_rules! from_regex {
 
 mod sequence {
     use std::iter::{self, FromIterator};
-    use cripes::pattern::{Class, Element, Sequence, Union};
+    #[cfg(feature = "pattern_class")]
+    use cripes::pattern::Class;
+    use cripes::pattern::{Element, Sequence, Union};
     use cripes::pattern::Reduce;
     use cripes::util::set::IsSubsetOf;
 
@@ -50,28 +52,32 @@ mod sequence {
     #[test]
     fn test_is_subset_of() {
         let unions = (&["abc", "def", "ghi"]).iter().map(|s| Union::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
+        #[cfg(feature = "pattern_class")]
         let classes = (&["abc", "def", "ghi"]).iter().map(|s| Class::<char>::from_iter(s.chars())).collect::<Vec<_>>();
         let seqs = (&["adg", "beh", "cfi"]).iter().map(|s| Sequence::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
         let useq = Sequence::from_iter(unions.iter().map(|u| Element::Union(u.clone())));
+        #[cfg(feature = "pattern_class")]
         let cseq = Sequence::from_iter(classes.iter().map(|c| Element::Class(c.clone())));
 
         // Every sequence should be a subset of itself.
         assert!(useq.is_subset_of(&useq));
-        assert!(cseq.is_subset_of(&cseq));
+        #[cfg(feature = "pattern_class")] assert!(cseq.is_subset_of(&cseq));
 
         // `useq` and `cseq` should be subsets of each other.
-        assert!(useq.is_subset_of(&cseq));
-        assert!(cseq.is_subset_of(&useq));
+        #[cfg(feature = "pattern_class")] {
+            assert!(useq.is_subset_of(&cseq));
+            assert!(cseq.is_subset_of(&useq));
+        }
 
         // each sequence in `seqs` should be a subset of both `useq` and
         // `cseq`.
         for seq in seqs.iter() {
             for i in 0..3 {
-                assert!(seq[i].is_subset_of(&cseq[i]));
+                #[cfg(feature = "pattern_class")] assert!(seq[i].is_subset_of(&cseq[i]));
                 assert!(seq[i].is_subset_of(&useq[i]));
             }
 
-            assert!(seq.is_subset_of(&cseq));
+        #[cfg(feature = "pattern_class")] assert!(seq.is_subset_of(&cseq));
             assert!(seq.is_subset_of(&useq));
         }
     }
@@ -137,9 +143,10 @@ mod union {
 
 mod wildcard {
     use std::{char, u8};
-    use std::iter::FromIterator;
     use char_iter;
-    use cripes::pattern::{ByteOrChar, Class, Element, Wildcard};
+    #[cfg(feature = "pattern_class")] use std::iter::FromIterator;
+    #[cfg(feature = "pattern_class")] use cripes::pattern::Class;
+    use cripes::pattern::{ByteOrChar, Element, Wildcard};
     use cripes::util::set::{Contains, IsSubsetOf, IsSupersetOf};
 
     #[test]
@@ -152,8 +159,10 @@ mod wildcard {
 
         assert!(ByteOrChar::Byte(b'H').is_subset_of(&Wildcard));
 
-        let cls = Class::from_iter("xyz".chars());
-        assert!(wild.is_superset_of(&cls));
+        #[cfg(feature = "pattern_class")] {
+            let cls = Class::from_iter("xyz".chars());
+            assert!(wild.is_superset_of(&cls));
+        }
     }
 
     #[test]
@@ -173,6 +182,7 @@ mod wildcard {
     }
 }
 
+#[cfg(feature = "pattern_class")]
 mod class {
     use std::char;
     use std::iter::FromIterator;

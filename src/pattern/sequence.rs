@@ -5,8 +5,11 @@ use std::ops::Index;
 use std::iter::FromIterator;
 
 use util::set::{self, Contains};
-use super::{Anchor, Atom, Class, Element, Repetition, Union};
+use super::{Anchor, Atom, Element, Repetition, Union};
 use super::{Reduce, flatten_and_reduce};
+#[cfg(feature = "pattern_class")]
+use super::Class;
+
 
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
@@ -129,6 +132,7 @@ is_subset_if_length_1_and_first_element_is_subset! {
     T, Anchor<T>, anchor;
     "A sequence is a subset of an anchor whenever the sequence has length one, and the first element is a subset of that atom."}
 
+#[cfg(feature = "pattern_class")]
 is_subset_if_length_1_and_first_element_is_subset! {
     T, Class<T>, class;
     "A sequence is a subset of an atom class whenever the sequence has length one, and the first element is a subset of that class."}
@@ -172,6 +176,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
 
             &Element::Anchor(ref a) => self.is_subset_of(a),
             &Element::Atom(ref a) => self.is_subset_of(a),
+            #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => self.is_subset_of(c),
             &Element::Wildcard => self.len() == 1 && self[0].is_subset_of(elt),
             &Element::Not(ref element) => ! self.is_subset_of(&**element),

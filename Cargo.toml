@@ -6,6 +6,12 @@ authors=["Collin J. Sutton"]
 [features]
 default = ["regex", "dot"]
 
+# `pattern_class`: enable the Class pattern element and related variants.
+# Classes are a useful abstraction over unions of single-atom patterns because
+# they support ranges, but they place additional restrictions on the kinds of
+# atoms that can be used with patterns.
+pattern_class = []
+
 # `dot`:  build binaries for producing state diagrams for grammar automatons in
 # GraphViz `dot` format.
 
@@ -23,12 +29,14 @@ path="tests/tests.rs"
 
 [dev-dependencies]
 compiletest_rs = "0.2.0"
-char-iter = "0.1"
 
 [dependencies]
+cripes-macros = { path = "../cripes-macros" }
+
 arrayvec = "0.3.0"
 bitflags = "0.7.0"
 bit-set = "0.4.0"
+char-iter = "0.1"
 num-traits = "*"
 smallvec = "*"
 itertools = "*"

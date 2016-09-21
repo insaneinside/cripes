@@ -1,5 +1,6 @@
 #![feature(inclusive_range_syntax)]
 #![feature(try_from)]
+#![feature(stmt_expr_attributes)]
 
 #[cfg(feature = "regex")]
 extern crate regex_syntax;

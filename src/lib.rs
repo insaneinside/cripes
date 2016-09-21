@@ -18,8 +18,8 @@
 // required in the `pattern` module, where we use them for checking whether
 // particular atoms are members of a range in an atom class.
 #![feature(range_contains)]
-#![feature(inclusive_range)]
 #![feature(inclusive_range_syntax)]
+#![cfg_attr(feature = "pattern_class", feature(inclusive_range))]
 
 // `conservative_impl_trait` is used to provide iterators from various types
 // without resorting to unwieldy workarounds or viral proliferation of
@@ -34,6 +34,8 @@
 // patterns, because there are some features of regex_syntax that we simply
 // don't support.
 #![cfg_attr(feature = "regex", feature(try_from))]
+
+#[macro_use] extern crate cripes_macros;
 
 extern crate num_traits;
 extern crate bit_set;
@@ -50,10 +52,7 @@ extern crate bitflags;
 #[macro_use]
 extern crate error_chain;
 
-#[macro_use]
 pub mod util;
-
-#[macro_use]
 pub mod symbol;
 pub mod pattern;
 pub mod automaton;

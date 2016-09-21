@@ -7,7 +7,10 @@ use std::iter::FromIterator;
 use itertools::Itertools;
 
 use util::set::{self, IsSubsetOf};
-use super::{Anchor, Atom, Class, Element, Repetition, Sequence};
+use super::{Anchor, Atom, Element, Repetition, Sequence};
+#[cfg(feature = "pattern_class")]
+use super::Class;
+
 use super::{Reduce, flatten_and_reduce};
 
 // To hide the implementation details, we wrap the type alias in
@@ -135,6 +138,7 @@ is_subset_if_all_members_are_subsets! {
     T, Repetition<T>, repetition;
     "A union is a subset of a repetition if all members of the union are subsets of the repetition"}
 
+#[cfg(feature = "pattern_class")]
 is_subset_if_all_members_are_subsets! {
     T, Class<T>, class;
     "A union is a subset of a class of atoms if all members of the union are subsets of the class"}
@@ -147,6 +151,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
         match elt {
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
+            #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => self.is_subset_of(c),
             &Element::Sequence(ref s) => self.is_subset_of(s),
             &Element::Repeat(ref r) => self.is_subset_of(r),

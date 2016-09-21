@@ -1,14 +1,15 @@
 //! Various helpers for code-generation.
 
 use std::io;
-use std::cmp;
+#[cfg(feature = "pattern_class")] use std::cmp;
 use std::char;
 use std::iter;
 use std::usize;
 use std::ops::{Add, AddAssign, Range};
-#[cfg(test)]
+#[cfg(all(test, feature = "pattern_class"))]
 use std::iter::FromIterator;
 
+#[cfg(feature = "pattern_class")]
 use super::{Atom, Class, ClassMember};
 
 // ================================================================
@@ -243,11 +244,13 @@ fn test_readable_char() {
 fn test_sizedread() {
     assert_eq!(ReadSize::Exact(1), 'a'.read_size());
     assert_eq!(ReadSize::Exact(3), '✓'.read_size());
+    #[cfg(feature = "pattern_class")]
     assert_eq!(ReadSize::Range(1, 3), Class::from_iter(['x', 'y', '⚔'].into_iter().cloned()).read_size());
 }
 
 // ----------------------------------------------------------------
 
+#[cfg(feature = "pattern_class")]
 impl<T> SizedRead for ClassMember<T>
     where T: Atom + SizedRead
 {
@@ -267,6 +270,7 @@ impl<T> SizedRead for ClassMember<T>
     }
 }
 
+#[cfg(feature = "pattern_class")]
 impl<T> SizedRead for Class<T>
     where T: Atom + SizedRead
 {
