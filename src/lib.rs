@@ -45,14 +45,17 @@ extern crate smallvec;
 extern crate arrayvec;
 extern crate itertools;
 
-#[cfg(feature="regex")]
-extern crate regex_syntax;
+apply_attrs! {
+    cfg(feature="regex") => {
+        extern crate regex_syntax;
+        extern crate char_iter;
+    },
 
-#[macro_use]
-extern crate bitflags;
-
-#[macro_use]
-extern crate error_chain;
+    macro_use => {
+        extern crate bitflags;
+        extern crate error_chain;
+    }
+}
 
 pub mod util;
 pub mod symbol;
