@@ -50,7 +50,10 @@ pub enum Transition<A: Atom> {
     Atom(A),
 
     /// Transition on any one of a class of atoms.
-    Class(Class<A>)
+    Class(Class<A>),
+
+    /// Transition on any atom that does _not_ match the contained input.
+    Not(Box<Input<A>>),
 }
 
 impl<A: Atom> From<Element<A>> for Transition<A> {

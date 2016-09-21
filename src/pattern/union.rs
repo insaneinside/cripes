@@ -158,6 +158,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Union<T> {
             // also subsets.
             &Element::Wildcard => self.iter().all(|m| m.is_subset_of(&Element::Wildcard)),
 
+            &Element::Not(ref element) => ! self.is_subset_of(&**element),
         }
     }
 }

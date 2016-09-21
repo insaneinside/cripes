@@ -174,6 +174,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
             &Element::Atom(ref a) => self.is_subset_of(a),
             &Element::Class(ref c) => self.is_subset_of(c),
             &Element::Wildcard => self.len() == 1 && self[0].is_subset_of(elt),
+            &Element::Not(ref element) => ! self.is_subset_of(&**element),
         }
     }
 }

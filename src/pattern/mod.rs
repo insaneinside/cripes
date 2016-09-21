@@ -159,6 +159,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Anchor<T> {
             &Element::Atom(ref a) => self.is_subset_of(a),
             &Element::Class(ref c) => self.is_subset_of(c),
             &Element::Wildcard => false,
+            &Element::Not(ref element) => ! self.is_subset_of(&**element),
         }
     }
 }
@@ -253,8 +254,10 @@ pub enum Element<T: Atom> {
 
         /// Name used for the capture
         name: String
-    }
+    },
 
+    /// Negated expression
+    Not(Box<Element<T>>)
 }
 
 /// Flag that indicates how a particular element in the input vector passed to
@@ -411,7 +414,13 @@ impl<T: Atom> Element<T> {
             Element::Union(u) => Element::Union(u.map_atoms(f)),
             Element::Repeat(rep) => Element::Repeat(rep.map_atoms(f)),
             Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
+            Element::Not(element) => Element::not(element.map_atoms(f)),
         }
+    }
+
+    /// Negate the given pattern element.
+    pub fn not(elt: Self) -> Self {
+        Element::Not(Box::new(elt))
     }
 }
 
@@ -441,6 +450,7 @@ impl<T: Atom> set::Contains<T> for Element<T> {
             &Element::Repeat(ref r) => r.contains(atom),
             &Element::Tagged{ref element, ..} => element.contains(atom),
             &Element::Anchor(_) => false,
+            &Element::Not(ref element) => ! element.contains(atom),
         }
     }
 }
@@ -456,7 +466,8 @@ macro_rules! element_is_subset_of_impl {
                     &Element::Union(ref u) => u.is_subset_of($name),
                     &Element::Tagged{ref element, ..} => element.is_subset_of($name),
                     &Element::Repeat(ref r) => r.is_subset_of($name),
-                    &Element::Anchor(ref a) => a.is_subset_of($name)
+                    &Element::Anchor(ref a) => a.is_subset_of($name),
+                    &Element::Not(ref element) => ! (&**element).is_subset_of($name),
                 }
             }
         }
@@ -518,7 +529,9 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
                 &Element::Atom(_) |
                 &Element::Sequence(_) |
                 &Element::Anchor(_)
-                    => false, },
+                    => false,
+                &Element::Not(ref element) => ! self.is_subset_of(&**element),
+            },
             &Element::Atom(a) => a.is_subset_of(other),
             &Element::Class(ref c) => c.is_subset_of(other),
             &Element::Sequence(ref s) => s.is_subset_of(other),
@@ -526,6 +539,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
             &Element::Repeat(ref rep) => (*rep).is_subset_of(other),
             &Element::Tagged{ref element, ..} => element.is_subset_of(other),
             &Element::Anchor(_) => false,
+            &Element::Not(ref element) => ! (&**element).is_subset_of(other),
         }
     }
 }

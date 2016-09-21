@@ -142,6 +142,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Repetition<T> {
             &Element::Union(ref u) => self.is_subset_of(u),
             &Element::Repeat(ref r) => self.is_subset_of(r),
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
+            &Element::Not(ref element) => ! self.is_subset_of(&**element),
         }
     }
 }

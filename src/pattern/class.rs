@@ -144,7 +144,6 @@ impl<T: Atom> From<Range<T>> for ClassMember<T>
 /// A set of atoms and/or ranges of atoms.
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Class<T: Atom> {
-    polarity: Polarity,
     members: Vec<ClassMember<T>>
 }
 
@@ -152,19 +151,18 @@ pub struct Class<T: Atom> {
 // predicate methods, currently require at least O(N) time.  We could probably
 // improve this by changing the storage representation.
 impl<T: Atom> Class<T> {
-    /// Create a new Class instance with specified polarity and members taken
-    /// from the given iterator.
-    pub fn new<I,U>(p: Polarity, items: I) -> Self
+    /// Create a new Class instance with members taken from the given iterator.
+    pub fn new<I,U>(items: I) -> Self
         where I: IntoIterator<Item=U>,
               ClassMember<T>: From<U> {
-        Class{polarity: p, members: Vec::from_iter(items.into_iter().map(|x| x.into()))}
+        Class{members: Vec::from_iter(items.into_iter().map(|x| x.into()))}
     }
 
     /// Create a new Class instance from an iterator of ClassMember instances.
     pub fn from_members<I>(m: I) -> Self
         where I: IntoIterator<Item=ClassMember<T>>
     {
-        Class{polarity: Polarity::NORMAL, members: m.into_iter().collect()}
+        Class{members: m.into_iter().collect()}
     }
 
     /// Map the atoms in the class to a different atom type.
@@ -172,33 +170,19 @@ impl<T: Atom> Class<T> {
         where F: Fn(T) -> U,
               U: Atom
     {
-        Class::new(self.polarity, self.members.into_iter().map(|m| m.map_atoms(&f)))
+        Class::new(self.members.into_iter().map(|m| m.map_atoms(&f)))
     }
 
     /// Check whether the class would match a particular atom.
     pub fn matches(&self, x: T) -> bool {
-        self.has_member(x).bitxor(self.polarity == Polarity::INVERTED)
-    }
-
-    /// Check whether a particular atom is a member of this class.
-    /// Unlike `matches`, this method does not take the class's polarity
-    /// into account.
-    pub fn has_member(&self, x: T) -> bool {
         self.members.iter().any(|&range| range.contains(x))
     }
 
     /// Get the number of members (atoms) in the class.
     ///
     /// Ranges of atoms count as the number of atoms in each range.
-    // FIXME: [bug] handle inverted polarity?
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize where T: Distance {
         self.members.iter().map(|m| m.len()).sum()
-    }
-
-    /// Get the class's polarity.
-    #[inline]
-    pub fn polarity(&self) -> Polarity {
-        self.polarity
     }
 
     /// Check if the class contains zero members.
@@ -207,31 +191,20 @@ impl<T: Atom> Class<T> {
         self.members.is_empty()
     }
 
-
     /// Fetch an iterator over the members specified in the class.
-    ///
-    /// Note that if the class has inverted polarity, the atoms in these
-    /// members will be those which are **not** matched by the class.
     pub fn iter_members<'a>(&'a self) -> impl Iterator<Item=&'a ClassMember<T>> {
         self.members.iter()
     }
 
     /// Fetch an iterator over the atoms specified in the class.
-    ///
-    /// Note that if the class has inverted polarity, these will be those atoms
-    /// which are **not** matched by the class.
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=T> + 'a {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=T> + 'a  where T: Step {
         self.members.iter().flat_map(|m| m.iter())
     }
 }
 
 impl<T: Atom> Debug for Class<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.polarity == Polarity::NORMAL {
-            write!(f, "[{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
-        } else {
-            write!(f, "[^{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
-        }
+        write!(f, "[{}]", self.members.iter().map(|m| format!("{:?}", m)).join(","))
     }
 }
 
@@ -252,7 +225,7 @@ impl<T: Atom> set::IsSubsetOf<T> for Class<T> {
     /// only member of the class!
     #[inline]
     fn is_subset_of(&self, atom: &T) -> bool {
-        self.contains(*atom) && self.polarity == Polarity::NORMAL && self.len() == 1
+        self.contains(*atom) && self.len() == 1
     }
 }
 
@@ -326,7 +299,7 @@ impl<T: Atom, U> FromIterator<U> for Class<T>
 where ClassMember<T>: From<U> {
     fn from_iter<I>(iter: I) -> Self
         where I: IntoIterator<Item=U> {
-        Class{polarity: Polarity::NORMAL, members: Vec::from_iter(iter.into_iter().map(|x| x.into()))}
+        Class{members: Vec::from_iter(iter.into_iter().map(|x| x.into()))}
     }
 }
 
@@ -334,9 +307,8 @@ macro_rules! impl_class_from {
     ($T: ty, $from: ty) => {
         impl From<$from> for Class<$T> {
             fn from(c: $from) -> Self {
-                Self::new(Polarity::NORMAL,
-                          c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
-                                            else { ClassMember::Atom(cr.start.into()) }))
+                Self::new(c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
+                                                 else { ClassMember::Atom(cr.start.into()) }))
             }
         }
     };
@@ -346,15 +318,3 @@ impl_class_from!(char, regex_syntax::CharClass);
 impl_class_from!(u8, regex_syntax::ByteClass);
 impl_class_from!(ByteOrChar, regex_syntax::CharClass);
 impl_class_from!(ByteOrChar, regex_syntax::ByteClass);
-
-// ----------------------------------------------------------------
-
-/** Flag type used to differentiate between normal and inverting matches on
- * pattern elements. */
-#[derive(Debug,Copy,Clone,PartialEq, PartialOrd, Eq, Ord)]
-pub enum Polarity {
-    /// Normal match behavior.
-    NORMAL,
-    /// Invert the match result.
-    INVERTED
-}
