@@ -89,6 +89,10 @@ macro_rules! impl_basic_node_mut {
         fn add_outgoing_edge(&mut self, e: $I) {
             self.outgoing_edges.push(e);
         }
+
+        fn rev(&mut self) {
+            ::std::mem::swap(&mut self.incoming_edges, &mut self.outgoing_edges);
+        }
     }
 }
 

@@ -83,6 +83,12 @@ pub trait DirectedEdge: Edge {
     fn target(&self) -> Self::NodeId;
 }
 
+/// Mutator methods for directed edges.
+pub trait DirectedEdgeMut: Edge {
+    /// Reverse the edge, swapping the source and target node IDs.
+    fn rev(&mut self);
+}
+
 // ----------------------------------------------------------------
 
 /// Any node type used by a graph.
@@ -140,6 +146,9 @@ pub trait DirectedNodeMut: DirectedNode {
 
     /// Record the existence of an edge that originates from this node.
     fn add_outgoing_edge(&mut self, e: Self::EdgeId);
+
+    /// Swap the internal lists of incoming and outgoing edges.
+    fn rev(&mut self);
 }
 
 // ----------------------------------------------------------------
@@ -387,4 +396,25 @@ impl<T> DirectedGraph for T
         self.node(n).outgoing_edges()
     }
 
+}
+
+/// Mutator methods for directed graphs.
+pub trait DirectedGraphMut: DirectedGraph {
+    /// Reverse all nodes and edges in the graph.
+    fn rev(&mut self);
+}
+
+impl<T> DirectedGraphMut for T
+    where T: DirectedGraph + ConcreteGraphMut,
+          T::Node: DirectedNodeMut<EdgeId=T::EdgeId>,
+          T::Edge: DirectedEdgeMut<NodeId=T::NodeId>
+{
+    fn rev(&mut self) {
+        for id in self.node_ids() {
+            self.node_mut(id).rev();
+        }
+        for id in self.edge_ids() {
+            self.edge_mut(id).rev();
+        }
+    }
 }

@@ -88,6 +88,12 @@ impl<I> interface::DirectedEdge for Edge<I> where I: Id {
     fn target(&self) -> I { self.target }
 }
 
+impl<I> interface::DirectedEdgeMut for Edge<I> where I: Id {
+    fn rev(&mut self) {
+        ::std::mem::swap(&mut self.source, &mut self.target);
+    }
+}
+
 
 impl<I: Id, I2: Copy> From<(I2, I2)> for Edge<I>
     where I: From<I2> {

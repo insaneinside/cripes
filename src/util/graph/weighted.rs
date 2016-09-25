@@ -42,6 +42,15 @@ impl<T, I> interface::DirectedEdge for Edge<T, I>
     fn target(&self) -> I { self.target }
 }
 
+impl<T, I> interface::DirectedEdgeMut for Edge<T, I>
+    where I: Id,
+          T: Data {
+    fn rev(&mut self) {
+        ::std::mem::swap(&mut self.source, &mut self.target);
+    }
+}
+
+
 impl<T: Data, I: Id> Edge<T, I> {
     /// Create an edge with the given source & target node indices and
     /// weight data.
