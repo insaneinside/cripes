@@ -167,3 +167,8 @@ impl<T, I> interface::DirectedNode for Node<T, I>
     where T: Data, I: Id {
     impl_basic_node!(I);
 }
+
+impl<T, I> interface::DirectedNodeMut for Node<T, I>
+    where T: Data, I: Id {
+    impl_basic_node_mut!(I);
+}

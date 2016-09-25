@@ -131,7 +131,10 @@ pub trait DirectedNode: Node {
 
     /// Get the number of outgoing edges.
     fn outgoing_edge_count(&self) -> usize;
+}
 
+/// Mutator methods for directed nodes.
+pub trait DirectedNodeMut: DirectedNode {
     /// Record the existence of an edge that terminates at this node.
     fn add_incoming_edge(&mut self, e: Self::EdgeId);
 
@@ -247,11 +250,14 @@ pub trait ConcreteGraph: Graph {
     /// Get an immutable reference to a specific node.
     fn node(&self, Self::NodeId) -> &Self::Node;
 
-    /// Get a mutable reference to a specific node.
-    fn node_mut(&mut self, Self::NodeId) -> &mut Self::Node;
-
     /// Get an immutable reference to a specific edge.
     fn edge(&self, Self::EdgeId) -> &Self::Edge;
+}
+
+/// Mutator methods for concrete graphs.
+pub trait ConcreteGraphMut: ConcreteGraph {
+    /// Get a mutable reference to a specific node.
+    fn node_mut(&mut self, Self::NodeId) -> &mut Self::Node;
 
     /// Get a mutable reference to a specific edge.
     fn edge_mut(&mut self, Self::EdgeId) -> &mut Self::Edge;

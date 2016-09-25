@@ -2,7 +2,7 @@
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::default::Default;
-use super::interface::{Graph, ConcreteGraph, Id};
+use super::interface::{Graph, ConcreteGraphMut, Id};
 use util::splitvec::SplitVec;
 
 // ----------------------------------------------------------------
@@ -116,7 +116,7 @@ impl<G, E, F> NodeFn<G, E> for F
 /// under construction.
 #[derive(Clone, Debug)]
 pub struct Builder<G>
-    where G: ConcreteGraph
+    where G: ConcreteGraphMut
 {
     graph: RefCell<G>,
 
@@ -127,7 +127,7 @@ pub struct Builder<G>
     pub outputs: SplitVec<G::NodeId>,
 }
 
-impl<G> Builder<G> where G: ConcreteGraph
+impl<G> Builder<G> where G: ConcreteGraphMut
 {
     /// Create an empty `Builder` instance for the given entry node
     pub fn new(g: G, entry: G::NodeId) -> Self {
@@ -345,7 +345,7 @@ impl<G> Builder<G> where G: ConcreteGraph
 // ----------------------------------------------------------------
 
 /// Graph-building interface.
-pub trait Build<G: ConcreteGraph> {
+pub trait Build<G: ConcreteGraphMut> {
     /// Type from which the graph is built.
     type Input;
 

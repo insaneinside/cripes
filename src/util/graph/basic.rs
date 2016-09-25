@@ -43,6 +43,10 @@ impl<I: Id> interface::DirectedNode for Node<I> {
     impl_basic_node!(I);
 }
 
+impl<I: Id> interface::DirectedNodeMut for Node<I> {
+    impl_basic_node_mut!(I);
+}
+
 impl<I: Id> From<()> for Node<I> {
     #[inline(always)]
     fn from(_: ()) -> Self {

@@ -75,7 +75,11 @@ macro_rules! impl_basic_node {
         fn outgoing_edge_count(&self) -> usize {
             self.outgoing_edges.len()
         }
+    }
+}
 
+macro_rules! impl_basic_node_mut {
+    ($I: ident) => {
         #[inline(always)]
         fn add_incoming_edge(&mut self, e: $I) {
             self.incoming_edges.push(e);
@@ -165,13 +169,18 @@ impl<N, E> interface::ConcreteGraph for AdjacencyList<N, E>
     }
 
     #[inline(always)]
-    fn node_mut(&mut self, n: Self::NodeId) -> &mut Self::Node {
-        &mut self.nodes[n.index()]
-    }
-
-    #[inline(always)]
     fn edge(&self, e: Self::EdgeId) -> &Self::Edge {
         &self.edges[e.index()]
+    }
+}
+
+impl<N, E> interface::ConcreteGraphMut for AdjacencyList<N, E>
+    where N: interface::DirectedNodeMut,
+          E: interface::DirectedEdgeMut
+{
+    #[inline(always)]
+    fn node_mut(&mut self, n: Self::NodeId) -> &mut Self::Node {
+        &mut self.nodes[n.index()]
     }
 
     #[inline(always)]
