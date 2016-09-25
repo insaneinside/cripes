@@ -161,8 +161,8 @@ impl<N, E> interface::Graph for AdjacencyList<N, E>
 }
 
 impl<N, E> interface::ConcreteGraph for AdjacencyList<N, E>
-    where N: interface::DirectedNode,
-          E: interface::DirectedEdge
+    where N: interface::Node,
+          E: interface::Edge
 {
     type Node = N;
     type Edge = E;
