@@ -7,24 +7,28 @@ use smallvec::SmallVec;
 
 use super::interface::{self, Id};
 
-/// Trait bounds for types used as edge and node data payloads.
-pub trait Data: Clone {}
-impl<T> Data for T where T: Clone {}
-
 // ----------------------------------------------------------------
 // Edge
 
 /// Weighted edge type.
-#[derive(Clone,Debug)]
-pub struct Edge<T: Data, I: Id> {
+#[derive(Debug)]
+pub struct Edge<T, I: Id> {
     source: I,
     target: I,
     data: T
 }
 
-impl<T, I> interface::Edge for Edge<T, I>
-    where I: Id,
-          T: Data {
+
+impl<T, I: Id> Clone for Edge<T, I>
+    where T: Clone
+{
+    fn clone(&self) -> Self {
+        Edge{source: self.source, target: self.target, data: self.data.clone()}
+    }
+}
+
+
+impl<T, I: Id> interface::Edge for Edge<T, I> {
     type NodeId = I;
     #[inline]
     fn endpoints(&self) -> (Self::NodeId, Self::NodeId) {
@@ -32,9 +36,7 @@ impl<T, I> interface::Edge for Edge<T, I>
     }
 }
 
-impl<T, I> interface::DirectedEdge for Edge<T, I>
-    where I: Id,
-          T: Data {
+impl<T, I: Id> interface::DirectedEdge for Edge<T, I> {
     #[inline]
     fn source(&self) -> I { self.source }
 
@@ -42,16 +44,14 @@ impl<T, I> interface::DirectedEdge for Edge<T, I>
     fn target(&self) -> I { self.target }
 }
 
-impl<T, I> interface::DirectedEdgeMut for Edge<T, I>
-    where I: Id,
-          T: Data {
+impl<T, I: Id> interface::DirectedEdgeMut for Edge<T, I> {
     fn rev(&mut self) {
         ::std::mem::swap(&mut self.source, &mut self.target);
     }
 }
 
 
-impl<T: Data, I: Id> Edge<T, I> {
+impl<T, I: Id> Edge<T, I> {
     /// Create an edge with the given source & target node indices and
     /// weight data.
     pub fn new(source: I, target: I, data: T) -> Self {
@@ -64,28 +64,28 @@ impl<T: Data, I: Id> Edge<T, I> {
     }
 }
 
-impl<T: Data, I: Id> Deref for Edge<T, I> {
+impl<T, I: Id> Deref for Edge<T, I> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<T: Data, I: Id> DerefMut for Edge<T, I> {
+impl<T, I: Id> DerefMut for Edge<T, I> {
     fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
         &mut self.data
     }
 }
 
 
-impl<T: Data, I: Id, I2: Copy> From<(I2, I2)> for Edge<T, I>
+impl<T, I: Id, I2: Copy> From<(I2, I2)> for Edge<T, I>
     where T: Default, I: From<I2> {
     fn from(u: (I2, I2)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), Default::default())
     }
 }
 
-impl<T: Data, I: Id, I2: Copy> From<(I2, I2, T)> for Edge<T, I>
+impl<T, I: Id, I2: Copy> From<(I2, I2, T)> for Edge<T, I>
     where I: From<I2> {
     fn from(u: (I2, I2, T)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), u.2)
@@ -93,13 +93,13 @@ impl<T: Data, I: Id, I2: Copy> From<(I2, I2, T)> for Edge<T, I>
 }
 
 
-impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2)> for Edge<T, I>
+impl<'a, T, I: Id, I2: Copy> From<&'a (I2, I2)> for Edge<T, I>
     where T: Default, I: From<I2> {
     fn from(u: &'a (I2, I2)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), Default::default())
     }
 }
-impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2, T)> for Edge<T, I>
+impl<'a, T, I: Id, I2: Copy> From<&'a (I2, I2, T)> for Edge<T, I>
     where T: Clone, I: From<I2> {
     fn from(u: &'a (I2, I2, T)) -> Self {
         Self::new(I::from(u.0), I::from(u.1), u.2.clone())
@@ -123,14 +123,14 @@ impl<'a, T: Data, I: Id, I2: Copy> From<&'a (I2, I2, T)> for Edge<T, I>
 /// # }
 /// ```
 
-#[derive(Clone,Debug)]
-pub struct Node<T: Data, I: Id> {
+#[derive(Debug)]
+pub struct Node<T, I: Id> {
     incoming_edges: SmallVec<[I; 8]>,
     outgoing_edges: SmallVec<[I; 8]>,
     data: T
 }
 
-impl<T: Data, I: Id> Node<T, I> {
+impl<T, I: Id> Node<T, I> {
     /// Instantiate a node with the given data.
     pub fn new(data: T) -> Self {
         Node{incoming_edges: SmallVec::new(), outgoing_edges: SmallVec::new(), data: data}
@@ -141,8 +141,17 @@ impl<T: Data, I: Id> Node<T, I> {
         &self.data
     }
 }
+impl<T, I: Id> Clone for Node<T, I>
+    where T: Clone
+{
+    fn clone(&self) -> Self {
+        Node{incoming_edges: self.incoming_edges.clone(),
+             outgoing_edges: self.outgoing_edges.clone(),
+             data: self.data.clone()}
+    }
+}
 
-impl<T: Data, I: Id> Deref for Node<T, I> {
+impl<T, I: Id> Deref for Node<T, I> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -150,34 +159,31 @@ impl<T: Data, I: Id> Deref for Node<T, I> {
     }
 }
 
-impl<T: Data, I: Id> DerefMut for Node<T, I> {
+impl<T, I: Id> DerefMut for Node<T, I> {
     #[inline]
     fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
         &mut self.data
     }
 }
 
-impl<T: Data, I: Id> From<T> for Node<T, I> {
+impl<T, I: Id> From<T> for Node<T, I> {
     #[inline]
     fn from(data: T) -> Self {
         Self::new(data)
     }
 }
 
-impl<T, I> interface::Node for Node<T, I>
-    where T: Data, I: Id {
+impl<T, I: Id> interface::Node for Node<T, I> {
     type EdgeId = I;
     fn edges(&self) -> std::iter::Chain<std::slice::Iter<Self::EdgeId>,std::slice::Iter<Self::EdgeId>> {
         self.incoming_edges.iter().chain(self.outgoing_edges.iter())
     }
 }
 
-impl<T, I> interface::DirectedNode for Node<T, I>
-    where T: Data, I: Id {
+impl<T, I: Id> interface::DirectedNode for Node<T, I> {
     impl_basic_node!(I);
 }
 
-impl<T, I> interface::DirectedNodeMut for Node<T, I>
-    where T: Data, I: Id {
+impl<T, I: Id> interface::DirectedNodeMut for Node<T, I> {
     impl_basic_node_mut!(I);
 }
