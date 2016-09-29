@@ -3,7 +3,9 @@
 
 use std::iter::{self, Iterator};
 
-use cripes::util::graph::{Graph, ConcreteGraph, DirectedGraph,
+use cripes::util::graph::{Graph,
+                          ConcreteGraphMut,
+                          DirectedGraph,
                           WeightedGraph};
 use cripes::util::graph::transform::{Builder, Target};
 
