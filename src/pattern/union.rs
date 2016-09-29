@@ -94,11 +94,6 @@ impl<T: Atom> Reduce for Union<T> {
     }
 }
 
-impl<T: Atom> set::Contains<T> for Union<T> {
-    fn contains(&self, atom: T) -> bool {
-        self.0.iter().any(|m| m.contains(atom))
-    }
-}
 
 impl<T: Atom> FromIterator<Element<T>> for Union<T> {
     fn from_iter<I>(iter: I) -> Self
@@ -133,6 +128,13 @@ apply_attrs! {
 }
 
 // ----------------------------------------------------------------
+
+impl<T: Atom> set::Contains<T> for Union<T> {
+    fn contains(&self, atom: T) -> bool {
+        self.0.iter().any(|m| m.contains(atom))
+    }
+}
+
 impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Union<T> {
     /// A union is a subset of a sequence S if it consists entirely of
     /// sequences whose elements are subsets of the corresponding element in S.
