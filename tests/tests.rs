@@ -13,7 +13,7 @@ extern crate cripes;
 
 mod util;
 mod pattern;
-
+mod automaton;
 
 
 use std::path::PathBuf;
