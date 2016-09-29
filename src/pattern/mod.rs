@@ -471,7 +471,7 @@ macro_rules! element_is_subset_of_impl {
                     &Element::Class(ref c) => c.is_subset_of($name),
                     &Element::Sequence(ref s) => s.is_subset_of($name),
                     &Element::Union(ref u) => u.is_subset_of($name),
-                    &Element::Tagged{ref element, ..} => element.is_subset_of($name),
+                    &Element::Tagged{ref element, ..} => (&**element).is_subset_of($name),
                     &Element::Repeat(ref r) => r.is_subset_of($name),
                     &Element::Anchor(ref a) => a.is_subset_of($name),
                     &Element::Not(ref element) => ! (&**element).is_subset_of($name),
@@ -548,7 +548,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
             &Element::Sequence(ref s) => s.is_subset_of(other),
             &Element::Union(ref u) => u.is_subset_of(other),
             &Element::Repeat(ref rep) => (*rep).is_subset_of(other),
-            &Element::Tagged{ref element, ..} => element.is_subset_of(other),
+            &Element::Tagged{ref element, ..} => (&**element).is_subset_of(other),
             &Element::Anchor(_) => false,
             &Element::Not(ref element) => ! (&**element).is_subset_of(other),
         }
