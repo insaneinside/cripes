@@ -627,74 +627,79 @@ macro_rules! element_from_expr_impl {
         }
     );
 
+    // `Expr` variants for character-based patterns
     ($T:ty => (_char $($rest:ident)*); $($built:tt)*) => (
         element_from_expr_impl!($T => ( $($rest)* );
-                                    $($built)*
-                                    Expr::Literal{chars, casei} => {
-                                        if casei {
-                                            unsupported!(Expr::Literal{chars: chars, casei: casei},
-                                                         "case-insensitive matching")
-                                        } else if chars.len() > 1 {
-                                            Ok(Sequence::from_iter(chars.into_iter().map(|c| c.into())).into())
-                                        } else {
-                                            Ok(Element::Atom(chars[0].into()))
-                                        } },
-                                    Expr::AnyChar => Ok(Element::Wildcard),
-                                    Expr::AnyCharNoNL =>  Ok(Element::not(Element::Atom('\n'.into()))),
-                                    #[cfg(feature = "pattern_class")]
-                                    Expr::Class(c) => {
-                                        if c.is_empty() {
-                                            unsupported!(Expr::Class(c), "The empty class expression")
-                                        } else {
-                                            let first = c.iter().cloned().nth(0).unwrap();
-                                            if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
-                                            else { Ok(Element::Atom(first.start.into())) }
-                                        } },
-                                    #[cfg(not(feature = "pattern_class"))]
-                                    Expr::Class(c) => {
-                                        if c.is_empty() {
-                                            unsupported!(Expr::Class(c), "The empty class expression")
-                                        } else {
-                                            let first = c.iter().cloned().nth(0).unwrap();
-                                            if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
-                                            else { Ok(Element::Atom(first.start.into())) }
-                                        } },
+                                $($built)*
+                                Expr::Literal{chars, casei} => {
+                                    if casei {
+                                        unsupported!(Expr::Literal{chars: chars, casei: casei},
+                                                     "case-insensitive matching")
+                                    } else if chars.len() > 1 {
+                                        Ok(Sequence::from_iter(chars.into_iter().map(|c| c.into())).into())
+                                    } else {
+                                        Ok(Element::Atom(chars[0].into()))
+                                    } },
+                                Expr::AnyChar => Ok(Element::Wildcard),
+                                Expr::AnyCharNoNL =>  Ok(Element::not(Element::Atom('\n'.into()))),
+                                #[cfg(feature = "pattern_class")]
+                                Expr::Class(c) => {
+                                    if c.is_empty() {
+                                        unsupported!(Expr::Class(c), "The empty class expression")
+                                    } else {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
+                                        else { Ok(Element::Atom(first.start.into())) }
+                                    } },
+                                #[cfg(not(feature = "pattern_class"))]
+                                Expr::Class(c) => {
+                                    if c.is_empty() {
+                                        unsupported!(Expr::Class(c), "The empty class expression")
+                                    } else {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
+                                        else { Ok(Element::Atom(first.start.into())) }
+                                    } },
         );
     );
+
+    // `Expr` variants for byte-based patterns
     ($T:ty => (_byte $($rest:ident)*); $($built:tt)*) => (
         element_from_expr_impl!($T => ( $($rest)* );
-                                    $($built)*
-                                    Expr::LiteralBytes{bytes, casei} => {
-                                        if casei {
-                                            unsupported!(Expr::LiteralBytes{bytes: bytes, casei: casei},
-                                                         "case-insensitive matching")
-                                        } else if bytes.len() > 1 {
-                                            Ok(Element::Sequence(Sequence::from_iter(bytes.into_iter().map(|b| b.into()))))
-                                        } else {
-                                            Ok(Element::Atom(bytes[0].into()))
-                                        } },
-                                    Expr::AnyByte => Ok(Element::Wildcard),
-                                    Expr::AnyByteNoNL =>  Ok(Element::not(Element::Atom(b'\n'.into()))),
-                                    #[cfg(feature = "pattern_class")]
-                                    Expr::ClassBytes(c) => {
-                                        if c.is_empty() {
-                                            unsupported!(Expr::Class(c), "The empty class expression")
-                                        } else {
-                                            let first = c.iter().cloned().nth(0).unwrap();
-                                            if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
-                                            else { Ok(Element::Atom(first.start.into())) }
-                                        } },
-                                    #[cfg(not(feature = "pattern_class"))]
-                                    Expr::ClassBytes(c) => {
-                                        if c.is_empty() {
-                                            unsupported!(Expr::ClassBytes(c), "The empty class expression")
-                                        } else {
-                                            let first = c.iter().cloned().nth(0).unwrap();
-                                            if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
-                                            else { Ok(Element::Atom(first.start.into())) }
-                                        } },
+                                $($built)*
+                                Expr::LiteralBytes{bytes, casei} => {
+                                    if casei {
+                                        unsupported!(Expr::LiteralBytes{bytes: bytes, casei: casei},
+                                                     "case-insensitive matching")
+                                    } else if bytes.len() > 1 {
+                                        Ok(Element::Sequence(Sequence::from_iter(bytes.into_iter().map(|b| b.into()))))
+                                    } else {
+                                        Ok(Element::Atom(bytes[0].into()))
+                                    } },
+                                Expr::AnyByte => Ok(Element::Wildcard),
+                                Expr::AnyByteNoNL =>  Ok(Element::not(Element::Atom(b'\n'.into()))),
+                                #[cfg(feature = "pattern_class")]
+                                Expr::ClassBytes(c) => {
+                                    if c.is_empty() {
+                                        unsupported!(Expr::Class(c), "The empty class expression")
+                                    } else {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Ok(Element::Class(c.into())) }
+                                        else { Ok(Element::Atom(first.start.into())) }
+                                    } },
+                                #[cfg(not(feature = "pattern_class"))]
+                                Expr::ClassBytes(c) => {
+                                    if c.is_empty() {
+                                        unsupported!(Expr::ClassBytes(c), "The empty class expression")
+                                    } else {
+                                        let first = c.iter().cloned().nth(0).unwrap();
+                                        if c.len() > 1 || first.start != first.end { Ok(Element::Union(c.into())) }
+                                        else { Ok(Element::Atom(first.start.into())) }
+                                    } },
         );
     );
+
+    // Common `expr` variants
     ($T:ty => (_common $($rest:ident)*); $($built:tt)*) => (
         element_from_expr_impl!($T => ( $($rest)* ) ;
                                 $($built)*
@@ -736,13 +741,15 @@ macro_rules! element_from_expr_impl {
                                 Expr::WordBoundaryAscii => unimplemented!(),
                                 Expr::NotWordBoundaryAscii => unimplemented!(),*/
                                 _ => unimplemented!());
-        );
+    );
 }
 
 #[cfg(feature="regex")] element_from_expr_impl!(char => (_char _common));
 #[cfg(feature="regex")] element_from_expr_impl!(u8 => (_byte _common));
 #[cfg(feature="regex")] element_from_expr_impl!(ByteOrChar => (_byte _char _common));
 
+// ----------------------------------------------------------------
+// Conversions from atomic types
 
 macro_rules! element_from_atom_impl {
     ($A: ty => $T: ty) => {
@@ -767,6 +774,9 @@ macro_rules! element_from_variant_impl {
         }
     };
 }
+
+// ----------------------------------------------------------------
+// Conversions from variant value-types
 
 element_from_variant_impl!(T, T, Atom);
 #[cfg(feature = "pattern_class")]
