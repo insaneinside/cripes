@@ -1,3 +1,5 @@
+#![cfg(all(feature = "dot", feature = "regex"))]
+
 #![feature(try_from)]
 extern crate dot;
 extern crate cripes;

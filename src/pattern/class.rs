@@ -4,7 +4,7 @@ use std::ops::{BitXor, Sub, Range, RangeInclusive};
 use std::iter::FromIterator;
 use std::fmt::{self, Debug};
 
-use regex_syntax;
+#[cfg(feature = "regex")] use regex_syntax;
 use itertools::Itertools;
 
 use super::{Anchor, Atom, ByteOrChar, Element, Repetition, Sequence, Union};

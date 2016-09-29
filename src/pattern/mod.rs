@@ -55,12 +55,11 @@
 use std;
 use std::{char, u8, u32, usize};
 use std::{ptr, mem};
-use std::convert::{TryFrom, TryInto};
-use std::iter::{FromIterator,IntoIterator};
 use std::fmt::{self,Display,Debug};
 
-#[cfg(feature="regex")]
-use regex_syntax::Expr;
+#[cfg(feature="regex")] use std::convert::{TryFrom, TryInto};
+#[cfg(feature="regex")] use std::iter::{FromIterator,IntoIterator};
+#[cfg(feature="regex")] use regex_syntax::Expr;
 
 use util::set::{self, Contains};
 
@@ -556,6 +555,18 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
     }
 }
 
+// ----------------------------------------------------------------
+// regex_syntax conversions
+
+
+/// Parse a `regex`-style regular expression and return the corresponding
+/// Pattern object.
+#[cfg(feature = "regex")]
+pub fn parse_regex<'a,T: Atom>(s: &'a str) -> RegexConvResult<Element<T>>
+    where Element<T>: TryFrom<&'a str,Err=RegexConvError>
+{
+    s.try_into()
+}
 
 #[cfg(feature = "regex")]
 #[allow(missing_docs)]
@@ -572,7 +583,10 @@ mod regex_conv {
         }
     }
 }
-use self::regex_conv::*;
+
+#[cfg(feature = "regex")] pub use self::regex_conv::*;
+
+#[cfg(feature = "regex")]
 macro_rules! unsupported {
     ($e: expr, $s: expr) => {
         Err(RegexConvErrorKind::UnsupportedFeature($e, $s.into()).into())
@@ -584,12 +598,12 @@ macro_rules! unsupported {
 ///
 /// Useful because we have several types (u8, char, ByteOrChar) that can act as
 /// atoms, and parts of their implementations of this trait can be shared.
+#[cfg(feature = "regex")]
 macro_rules! element_from_expr_impl {
     ($T:ty => ($($rest:ident)+)) => { element_from_expr_impl!($T => ($($rest)+) ;); };
 
 
     ($T:ty => ( ); $($built:tt)*) => (
-        #[cfg(feature="regex")]
         impl TryFrom<Expr> for Element<$T> {
             type Err = RegexConvError;
             fn try_from(expr: Expr) -> RegexConvResult<Self> {
@@ -599,7 +613,6 @@ macro_rules! element_from_expr_impl {
             }
         }
 
-        #[cfg(feature="regex")]
         impl<'a> TryFrom<&'a str> for Element<$T> {
             type Err = RegexConvError;
 
@@ -725,9 +738,11 @@ macro_rules! element_from_expr_impl {
                                 _ => unimplemented!());
         );
 }
-element_from_expr_impl!(char => (_char _common));
-element_from_expr_impl!(u8 => (_byte _common));
-element_from_expr_impl!(ByteOrChar => (_byte _char _common));
+
+#[cfg(feature="regex")] element_from_expr_impl!(char => (_char _common));
+#[cfg(feature="regex")] element_from_expr_impl!(u8 => (_byte _common));
+#[cfg(feature="regex")] element_from_expr_impl!(ByteOrChar => (_byte _char _common));
+
 
 macro_rules! element_from_atom_impl {
     ($A: ty => $T: ty) => {
@@ -769,17 +784,4 @@ impl Display for Element<char> {
             _ => <Self as Debug>::fmt(self, f)
         }
     }
-}
-
-
-
-// ----------------------------------------------------------------
-
-/// Parse a `regex`-style regular expression and return the corresponding
-/// Pattern object.
-#[cfg(feature="regex")]
-pub fn parse_regex<'a,T: Atom>(s: &'a str) -> RegexConvResult<Element<T>>
-    where Element<T>: TryFrom<&'a str,Err=RegexConvError>
-{
-    s.try_into()
 }

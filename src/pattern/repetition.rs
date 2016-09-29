@@ -3,7 +3,7 @@
 use std::usize;
 use std::fmt::{self, Debug, Display};
 
-use regex_syntax::Repeater;
+#[cfg(feature = "regex")] use regex_syntax::Repeater;
 
 use util::set;
 use super::{Anchor, Atom, Element, Sequence, Union};
@@ -217,6 +217,7 @@ impl RepeatCount {
     }
 }
 
+#[cfg(feature = "regex")]
 impl From<Repeater> for RepeatCount {
     fn from(r: Repeater) -> Self {
         match r {
