@@ -31,8 +31,8 @@ pub mod visit;
 
 pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
 pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
-pub use self::interface::{Id, Edge, Node, Graph, ConcreteGraph};
-pub use self::interface::{DirectedGraph, DirectedNode, DirectedEdge};
+pub use self::interface::{Id, Edge, Node, Graph, ConcreteGraph, ConcreteGraphMut};
+pub use self::interface::{DirectedGraph, DirectedEdge, DirectedNode, DirectedNodeMut};
 pub use self::transform::{Build, Builder, Target};
 
 /// Simple data-bearing directed graph.  `N` determines the type of data
