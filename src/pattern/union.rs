@@ -67,10 +67,12 @@ impl<T: Atom> Reduce for Union<T> {
     fn reduce(mut self) -> Self::Output {
         if self.0.is_empty() { None }
         else {
+            // Reduce all child elements and flatten unions into self.
             flatten_and_reduce(&mut self.0, Element::Wildcard,
                                |elt| match elt { &Element::Union(ref u) => Some(u.len()), _ => None },
                                |elt| match elt { Element::Union(u) => u.into_inner(), _ => unreachable!() });
 
+            // Remove elements that are subsets of others.
             let mut reduced = self.0.clone().into_iter()
                 .sorted_by(|a, b| { if a.is_subset_of(b) || b.is_subset_of(a) { Ordering::Equal }
                                     else { a.cmp(b) } })
@@ -78,9 +80,16 @@ impl<T: Atom> Reduce for Union<T> {
                 .coalesce(|a, b| { if a.is_subset_of(&b) { Ok(b) }
                                    else if b.is_subset_of(&a) { Ok(a) }
                                    else { Err((a, b)) } })
-                .collect();
-            mem::swap(&mut self.0, &mut reduced);
-            Some(Element::Union(self))
+                .collect::<Vec<_>>();
+
+            match reduced.len() {
+                0 => None,
+                1 => Some(reduced.swap_remove(0)),
+                _ => {
+                    mem::swap(&mut self.0, &mut reduced);
+                    Some(Element::Union(self))
+                }
+            }
         }
     }
 }
