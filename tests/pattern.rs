@@ -1,15 +1,3 @@
-use std::fmt::Debug;
-use std::convert::TryFrom;
-use regex_syntax;
-use cripes::pattern::{Atom, Element};
-
-fn from_regex<T: Atom>(s: &str) -> Element<T>
-    where Element<T>: TryFrom<regex_syntax::Expr>,
-          <Element<T> as TryFrom<regex_syntax::Expr>>::Err: Debug
-{
-    TryFrom::try_from(regex_syntax::Expr::parse(s).unwrap()).unwrap()
-}
-
 macro_rules! extract_variant {
     ((ref $input: expr) -> $variant: ident) => ( match $input {
         &Element::$variant(ref x) => x,
@@ -22,8 +10,8 @@ macro_rules! extract_variant {
 
 /// Helper for parsing a regex and returning the inner pattern type.
 macro_rules! from_regex {
-    ($s: tt -> Element<$T: ty>) => ( from_regex::<$T>($s) );
-    ($s: tt -> $which: ident < $T: ty>) => (extract_variant!((from_regex::<$T>($s)) -> $which));
+    ($s: tt -> Element<$T: ty>) => ( ::cripes::pattern::parse_regex::<$T>($s).unwrap() );
+    ($s: tt -> $which: ident < $T: ty>) => (extract_variant!((::cripes::pattern::parse_regex::<$T>($s).unwrap()) -> $which));
 }
 
 mod sequence {
@@ -84,7 +72,6 @@ mod sequence {
 }
 
 mod union {
-    use super::from_regex;
     use std::iter::FromIterator;
     use cripes::pattern::{Element, Union, Wildcard};
     use cripes::util::set::{Contains, IsSubsetOf};

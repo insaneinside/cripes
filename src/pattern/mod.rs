@@ -598,6 +598,20 @@ macro_rules! element_from_expr_impl {
                 }
             }
         }
+
+        #[cfg(feature="regex")]
+        impl<'a> TryFrom<&'a str> for Element<$T> {
+            type Err = RegexConvError;
+
+            /// Attempt to parse the given string slice into a regex, then
+            /// convert to pattern representation.
+            fn try_from(s: &'a str) -> RegexConvResult<Self> {
+                match Expr::parse(s) {
+                    Err(e) => Err(RegexConvErrorKind::ParseFailure(e).into()),
+                    Ok(expr) => expr.try_into()
+                }
+            }
+        }
     );
 
     ($T:ty => (_char $($rest:ident)*); $($built:tt)*) => (
@@ -764,11 +778,8 @@ impl Display for Element<char> {
 /// Parse a `regex`-style regular expression and return the corresponding
 /// Pattern object.
 #[cfg(feature="regex")]
-pub fn parse_regex<T: Atom>(s: &str) -> RegexConvResult<Element<T>>
-    where Element<T>: TryFrom<Expr,Err=RegexConvError>
+pub fn parse_regex<'a,T: Atom>(s: &'a str) -> RegexConvResult<Element<T>>
+    where Element<T>: TryFrom<&'a str,Err=RegexConvError>
 {
-    match Expr::parse(s) {
-        Err(e) => Err(RegexConvErrorKind::ParseFailure(e).into()),
-        Ok(expr) => expr.try_into()
-    }
+    s.try_into()
 }
