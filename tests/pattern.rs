@@ -76,6 +76,14 @@ mod union {
     use cripes::pattern::{Element, Union, Wildcard};
     use cripes::util::set::{Contains, IsSubsetOf};
 
+    // Passing a single-element vector to `Union::new` should result in
+    // a panic.
+    #[test]
+    #[should_panic]
+    fn test_one_is_not_a_union() {
+        Union::<char>::new(vec!['a'.into()]);
+    }
+
     #[test]
     fn test_contains() {
         let u = Union::from_iter("abc".chars().map(|c| c.into()));
