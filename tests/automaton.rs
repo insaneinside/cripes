@@ -1,6 +1,8 @@
+use std::iter::FromIterator;
+
 use cripes::automaton::interface::{Automaton, State as IState, Transition as ITransition};
 use cripes::automaton::{Input, Action, State, Transition, DFA, BasicTypesConfig, TypesConfig};
-use cripes::pattern::parse_regex;
+use cripes::pattern::{Element, Sequence};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Conf;
@@ -19,8 +21,8 @@ impl TypesConfig for Conf {
 
 #[test]
 fn simple_sequence() {
-    let pat = parse_regex::<char>(r"abc").unwrap();
-    let dfa: DFA<Conf> = DFA::from(pat);
+    let seq = Sequence::from_iter((&['a', 'b', 'c']).iter().cloned().map(Into::<Element<char>>::into));
+    let dfa= DFA::<Conf>::from(Element::Sequence(seq));
     assert_eq!(4, dfa.state_count());
     assert_eq!(3, dfa.transition_count());
     assert_eq!(1, dfa.state_ids().filter(|id| dfa.state(*id).is_accept()).count());
