@@ -92,22 +92,22 @@ impl<I> Target<I> where I: Id {
 /// Trait describing bounds on graph-construction functions and closures passed
 /// to `Builder`'s methods.
 pub trait BuildFn<G, I>: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
-    where G: Graph
+    where G: ConcreteGraphMut
 {}
 
 impl<G, I, F> BuildFn<G, I> for F
     where F: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId,
-          G: Graph
+          G: ConcreteGraphMut
 {}
 
 /// Closure type used when a new node must be created on a graph
 pub trait NodeFn<G, E>: Fn(&mut G, &E) -> G::NodeId
-    where G: Graph
+    where G: ConcreteGraphMut
 {}
 
 impl<G, E, F> NodeFn<G, E> for F
     where F: Fn(&mut G, &E) -> G::NodeId,
-          G: Graph
+          G: ConcreteGraphMut
 {}
 
 // ----------------------------------------------------------------
