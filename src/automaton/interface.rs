@@ -2,23 +2,15 @@
 
 use std::fmt::Debug;
 
-use util::set;
+use util::{graph, set};
 use util::graph::interface::Id;
 use pattern::Atom;
 
-/// Trait bounds for any type used for input to an automaton state
+/// Trait for types used to describe possible inputs that trigger
+/// a given transition.
 pub trait Input: Clone + Debug + Eq + Ord + set::Contains<<Self as Input>::Atom> + set::IsSubsetOf<Self> {
     /// Smallest transition unit used.
     type Atom: Atom;
-}
-
-/// Metadata-bearing transition from one automaton state to another.
-pub trait Transition: Clone + Debug + Eq {
-    /// Input type that triggers this transition.
-    type Input: Input;
-
-    /// Fetch the input on which the transition is followed.
-    fn input(&self) -> &Self::Input;
 }
 
 /// Trait for types that contain some specification of actions to be performed.
@@ -30,10 +22,49 @@ pub trait Actions {
     fn actions(&self) -> &[Self::Action];
 }
 
+/// Trait for types that support adding actions.
+pub trait ActionsMut: Actions {
+    /// Add an action to the object.
+    fn add_action(&mut self, action: Self::Action);
+}
+
+/// An automaton state.
+pub trait State: Actions {
+    /// Check if the state is "accepting", i.e. is valid as an exit node for
+    /// the automaton.
+    fn is_accept(&self) -> bool;
+
+    /// Check if the state is a valid entry node for the automaton.
+    fn is_entry(&self) -> bool;
+}
+
+/// Mutation methods for automaton states.
+pub trait StateMut: State + ActionsMut {
+    /// Set whether the state is an accepting state.
+    fn set_accept(&mut self, accept: bool);
+
+    /// Set whether the state is an accepting state.
+    fn set_entry(&mut self, entry: bool);
+}
+
+/// Metadata-bearing transition from one automaton state to another.
+pub trait Transition: Actions + Clone + Debug + PartialEq {
+    /// Input type that triggers this transition.
+    type Input: Input;
+
+    /// Fetch the input on which the transition is followed.
+    fn input(&self) -> &Self::Input;
+}
+
 /// Interface for automaton implementations
 pub trait Automaton<'a, A: 'a + Atom> {
-    /// Concrete type used to represent automaton states
-    type State;
+    /// Action type used by [`Actions`](trait.Actions.html) implementations on
+    /// [`State`](trait.State.html) and [`Transition`](state.Transition.html)
+    /// associated types.
+    type Action;
+
+    /// Concrete type used to represent automaton states.
+    type State: StateMut<Action=Self::Action>;
 
     /// Type used to identify individual states.
     type StateId: Id;
@@ -41,7 +72,8 @@ pub trait Automaton<'a, A: 'a + Atom> {
     /// Iterator over the IDs of states in the automaton.
     type StateIdsIter: Iterator<Item=Self::StateId>;
 
-    /// Concrete type used to represent a single input to a given state.
+    /// Concrete type used to represent the possible atomic inputs that can
+    /// trigger a transition.
     type Input: 'a + Input<Atom=A>;
 
     /// Iterator over the possible inputs for a state.
@@ -49,13 +81,13 @@ pub trait Automaton<'a, A: 'a + Atom> {
 
     /// Type used to store the input and any relevant metadata for a transition
     /// from one state to another.
-    type Transition: Transition<Input=Self::Input>;
+    type Transition: Transition<Input=Self::Input, Action=Self::Action>;
 
     /// Type used to identify individual transitions.
     type TransitionId: Id;
 
     /// Iterator over the IDs of transitions in the automaton.
-    type TransitionIdsIter: Iterator<Item=Self::TransitionId>;
+    type TransitionIdsIter: 'a + Iterator<Item=Self::TransitionId>;
 
     /// Iterator over the possible outgoing transitions for a state.
     type TransitionsIter: Iterator<Item=(Self::TransitionId, Self::StateId)>;
@@ -110,3 +142,12 @@ pub trait NondeterministicAutomaton<'a,A: 'a + Atom>: Automaton<'a, A> {
     fn next_states(&'a self, current_state: Self::StateId, input: A) -> Self::NextStatesIter;
 }
 
+/// Interface for graph-based automata that support exposing their internal
+/// graph representations.
+pub trait Graph {
+    /// Concrete graph type used by the automaton.
+    type Graph: graph::DirectedGraph;
+
+    /// Fetch a reference to the automaton's internal graph.
+    fn graph(&self) -> &Self::Graph;
+}
