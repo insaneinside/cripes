@@ -58,7 +58,6 @@ apply_attrs! {
 }
 
 pub mod util;
-pub mod symbol;
 pub mod pattern;
 pub mod automaton;
 //pub mod grammar;
