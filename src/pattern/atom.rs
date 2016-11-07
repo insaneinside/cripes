@@ -5,8 +5,7 @@ use std::{ascii, cmp};
 use std::ops::Range;
 use std::fmt::Debug;
 
-use super::{Anchor, Element, Sequence, Repetition, Union};
-use util::set::{self, Contains};
+use util::set;
 
 apply_attrs! {
     cfg(not(feature = "pattern_class")) => {
@@ -23,82 +22,12 @@ apply_attrs! {
     }
 }
 
-// Without the Distance + Step bounds on Atom, this impl conflicts with that
-// for `RepeatCount`.
-#[cfg(feature = "pattern_class")]
-impl<T: Atom> set::IsSubsetOf<T> for T {
+impl<T: Atom, U> set::IsSubsetOf<U> for T
+    where U: set::Contains<T>
+{
     #[inline(always)]
-    fn is_subset_of(&self, other: &T) -> bool {
-        self == other
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Anchor<T>> for T {
-    /// An atom is never a subset of an anchor.
-    #[inline(always)]
-    fn is_subset_of(&self, _: &Anchor<T>) -> bool {
-        false
-    }
-}
-
-
-#[cfg(feature = "pattern_class")]
-impl<T: Atom> set::IsSubsetOf<Class<T>> for T {
-    #[inline(always)]
-    fn is_subset_of(&self, class: &Class<T>) -> bool {
-        class.contains(*self)
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Union<T>> for T
-    where T: set::IsSubsetOf<T>
-{
-    #[inline]
-    fn is_subset_of(&self, union: &Union<T>) -> bool {
-        union.iter().any(|m| self.is_subset_of(m))
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Sequence<T>> for T
-    where T: set::IsSubsetOf<T>
-{
-    #[inline]
-    fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
-        seq.len() == 1 && self.is_subset_of(&seq[0])
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Repetition<T>> for T
-    where T: set::IsSubsetOf<T>
-{
-    #[inline]
-    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
-        self.is_subset_of(rep.value()) && rep.count().contains(1)
-    }
-}
-
-impl<T: Atom> set::IsSubsetOf<Element<T>> for T
-    where T: set::IsSubsetOf<T> +
-          set::IsSubsetOf<Repetition<Element<T>>> +
-          set::IsSubsetOf<Sequence<Element<T>>> +
-          set::IsSubsetOf<Union<Element<T>>> +
-          set::IsSubsetOf<Anchor<T>>
-{
-    fn is_subset_of(&self, elt: &Element<T>) -> bool {
-        match elt {
-            &Element::Wildcard => true,
-            &Element::Atom(a) => *self == a,//self.is_subset_of(&a),
-
-            #[cfg(feature = "pattern_class")]
-            &Element::Class(ref class) => self.is_subset_of(class),
-            &Element::Union(ref union) => self.is_subset_of(union),
-            &Element::Repeat(ref rep) => self.is_subset_of(&**rep),
-            &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
-
-            &Element::Sequence(ref seq) => self.is_subset_of(seq),
-            &Element::Anchor(ref anch) => self.is_subset_of(anch),
-            &Element::Not(ref element) => ! self.is_subset_of(&**element),
-        }
+    fn is_subset_of(&self, other: &U) -> bool {
+        other.contains(*self)
     }
 }
 
