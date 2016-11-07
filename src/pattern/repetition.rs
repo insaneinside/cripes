@@ -74,13 +74,19 @@ impl<T> Repetition<T> {
         Repetition{value: self.value, count: new_count}
     }
 
+}
+
+impl<T, U> super::MapAtoms<T, U> for Repetition<Element<T>>
+    where T: Atom, U: Atom
+{
+    type Output = Repetition<Element<U>>;
+
     /// Transforms each contained atom using the supplied function or closure
     /// to produce a new repeated element.
-    pub fn map_atoms<U, F>(self, f: F) -> Repetition<U>
+    fn map_atoms<F>(self, f: F) -> Self::Output
         where F: Fn(T) -> U,
-              U: Atom
     {
-        Repetition{element: Box::new(self.element.map_atoms(f)), count: self.count}
+        Repetition{value: self.value.map_atoms(f), count: self.count}
     }
 }
 

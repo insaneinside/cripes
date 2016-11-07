@@ -58,18 +58,18 @@ impl<T> Union<T> {
     pub fn push(&mut self, t: T) {
         self.0.push(t);
     }
+}
+
+impl<T, U> super::MapAtoms<T, U> for Union<Element<T>>
+    where T: Atom, U: Atom {
+    type Output = Union<Element<U>>;
+
     /// Transforms each contained atom using the supplied function or closure
     /// to produce a new sequence.
-    pub fn map_atoms<U, F>(self, f: F) -> Union<U>
+    fn map_atoms<F>(self, f: F) -> Union<Element<U>>
         where F: Fn(T) -> U,
-              U: Atom
     {
         self.0.into_iter().map(|elt| elt.map_atoms(&f)).collect()
-    }
-
-    #[inline(always)]
-    fn into_inner(self) -> union_impl::Inner<T> {
-        self.0
     }
 }
 

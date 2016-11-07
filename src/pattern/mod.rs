@@ -100,6 +100,18 @@ pub trait Reduce {
     fn reduce(self) -> Self::Output;
 }
 
+/// Interface for mapping between atom types in a pattern element.
+pub trait MapAtoms<T, U> where T: Atom, U: Atom {
+    /// Type produced by the implementation.
+    type Output;
+
+    /// Use the provided function to transform all atoms in `self` to the
+    /// provided type
+    fn map_atoms<F>(self, f: F) -> Self::Output
+        where F: Fn(T) -> U;
+}
+
+
 /// A bound on some expected integer-typed size value.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SizeBound {

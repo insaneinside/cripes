@@ -76,11 +76,19 @@ impl<T> ::std::iter::Extend<T> for Sequence<T> {
         self.0.extend(iter)
     }
 }
+
+// ----------------------------------------------------------------
+
+
+impl<T, U> super::MapAtoms<T, U> for Sequence<Element<T>>
+    where T: Atom, U: Atom
+{
+    type Output = Sequence<Element<U>>;
+
     /// Transforms each contained atom using the supplied function or closure
     /// to produce a new sequence.
-    pub fn map_atoms<U, F>(self, f: F) -> Sequence<U>
+    fn map_atoms<F>(self, f: F) -> Self::Output
         where F: Fn(T) -> U,
-              U: Atom
     {
         self.0.into_iter().map(|elt| elt.map_atoms(&f)).collect()
     }
