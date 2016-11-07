@@ -113,6 +113,13 @@ pub trait MapAtoms<T, U> where T: Atom, U: Atom {
 }
 
 
+/// Trait for retrieving the expected number of atoms required to match
+/// a pattern.
+pub trait AtomicLen {
+    /// Fetch a bound on the number of atoms required to match the element.
+    fn atomic_len(&self) -> SizeBound;
+}
+
 /// A bound on some expected integer-typed size value.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SizeBound {
@@ -252,6 +259,13 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Anchor<T> {
             &Element::Wildcard => false,
             &Element::Not(ref element) => ! self.is_subset_of(&**element),
         }
+    }
+}
+
+impl<T: Atom> AtomicLen for Anchor<T> {
+    fn atomic_len(&self) -> SizeBound {
+        // For now we don't support lookahead/lookbehind, so this will be zero.
+        0.into()
     }
 }
 
@@ -515,6 +529,25 @@ impl<T: Atom> Element<T> {
     /// Negate the given pattern element.
     pub fn not(elt: Self) -> Self {
         Element::Not(Box::new(elt))
+    }
+}
+
+impl<T: Atom> AtomicLen for Element<T> {
+    fn atomic_len(&self) -> SizeBound {
+        match self {
+            &Element::Wildcard |
+            &Element::Atom(_)
+                => SizeBound::Exact(1),
+            #[cfg(feature = "pattern_class")]
+            &Element::Class(ref c) => c.atomic_len(),
+            &Element::Anchor(ref a) => a.atomic_len(),
+            &Element::Sequence(ref s) => s.atomic_len(),
+            &Element::Union(ref u) => u.atomic_len(),
+            &Element::Repeat(ref rep) => rep.atomic_len(),
+            &Element::Tagged{ref element, ..} |
+            &Element::Not(ref element)
+                => element.atomic_len(),
+        }
     }
 }
 
