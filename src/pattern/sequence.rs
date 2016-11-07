@@ -14,20 +14,19 @@ use super::Class;
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
 mod seq_impl {
-    use ::pattern::Element;
-    pub type Inner<T> = Vec<Element<T>>;
+    pub type Inner<T> = Vec<T>;
 }
 
 /// Sequence of patterns.
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Sequence<T: Atom>(seq_impl::Inner<T>);
+pub struct Sequence<T>(seq_impl::Inner<T>);
 
-impl<T: Atom> Sequence<T> {
+impl<T> Sequence<T> {
     /// Create a new sequence from the given vector.
     ///
     /// This method will **panic** if the given vector is not at least two
     /// elements long.
-    pub fn new(v: Vec<Element<T>>) -> Self {
+    pub fn new(v: Vec<T>) -> Self {
         if v.len() < 2 {
             panic!("Sequences must have at least two elements");
         }
@@ -40,14 +39,43 @@ impl<T: Atom> Sequence<T> {
     }
 
     /// Fetch an iterator over the elements in the sequence
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a Element<T>> {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=&'a T> {
         self.0.iter()
+    }
+
+    /// Produce an iterator over the elements in the sequence, consuming it.
+    pub fn into_iter(self) -> impl Iterator<Item=T> {
+        self.0.into_iter()
     }
 
     fn into_inner(self) -> seq_impl::Inner<T> {
         self.0
     }
 
+    /// Append an item to the sequence.
+    pub fn push(&mut self, t: T) {
+        self.0.push(t);
+    }
+
+    /// Insert a value at the specified index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds.
+    pub fn insert(&mut self, index: usize, value: T) {
+        self.0.insert(index, value)
+    }
+
+}
+
+
+impl<T> ::std::iter::Extend<T> for Sequence<T> {
+    fn extend<I>(&mut self, iter: I)
+        where I: IntoIterator<Item=T>
+    {
+        self.0.extend(iter)
+    }
+}
     /// Transforms each contained atom using the supplied function or closure
     /// to produce a new sequence.
     pub fn map_atoms<U, F>(self, f: F) -> Sequence<U>
@@ -58,7 +86,7 @@ impl<T: Atom> Sequence<T> {
     }
 }
 
-impl<T: Atom> Reduce for Sequence<T> {
+impl<T: Atom> Reduce for Sequence<Element<T>> {
     type Output = Option<Element<T>>;
 
     /// Flatten the sequence and apply implementation-defined optimizations.
@@ -76,33 +104,33 @@ impl<T: Atom> Reduce for Sequence<T> {
     }
 }
 
-impl<T: Atom> Index<usize> for Sequence<T> {
-    type Output = Element<T>;
+impl<T> Index<usize> for Sequence<T> {
+    type Output = T;
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
     }
 
 }
 
-impl<T: Atom> IntoIterator for Sequence<T> {
-    type Item = Element<T>;
-    type IntoIter = std::vec::IntoIter<Element<T>>;
+impl<T> IntoIterator for Sequence<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<T: Atom> FromIterator<Element<T>> for Sequence<T> {
+impl<T> FromIterator<T> for Sequence<T> {
     fn from_iter<I>(iter: I) -> Self
-        where I: IntoIterator<Item=Element<T>>
+        where I: IntoIterator<Item=T>
     {
         Sequence(iter.into_iter().collect())
     }
 }
 
 
-impl<T: Atom> set::Contains<T> for Sequence<T> {
+impl<T: Atom> set::Contains<T> for Sequence<Element<T>> {
     /// A sequence always contains at least two elements, and thus will never
     /// match a single atom.
     #[inline(always)]
@@ -116,7 +144,7 @@ impl<T: Atom> set::Contains<T> for Sequence<T> {
 
 macro_rules! is_subset_if_length_1_and_first_element_is_subset {
     ($T: ident,$Other: ty, $name: ident; $doc: expr) => {
-        impl<$T: Atom> set::IsSubsetOf<$Other> for Sequence<$T> {
+        impl<$T: Atom> set::IsSubsetOf<$Other> for Sequence<Element<$T>> {
             #[doc = $doc]
             #[inline]
             fn is_subset_of(&self, $name: &$Other) -> bool {
@@ -137,7 +165,9 @@ is_subset_if_length_1_and_first_element_is_subset! {
     T, Class<T>, class;
     "A sequence is a subset of an atom class whenever the sequence has length one, and the first element is a subset of that class."}
 
-impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Sequence<T> {
+impl<T> set::IsSubsetOf<Sequence<T>> for Sequence<T>
+    where T: set::IsSubsetOf<T>
+{
     /// A sequence `A` can be a subset of another sequence `B` *if* both have the
     /// same length and each element in `A` is a subset of the corresponding element
     /// in `B`:
@@ -149,30 +179,34 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Sequence<T> {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Union<T>> for Sequence<T> {
+impl<T, M> set::IsSubsetOf<Union<M>> for Sequence<T>
+    where Sequence<T>: set::IsSubsetOf<M>
+{
     /// A sequence is a subset of a union whenever it is a subset of one of the
     /// union's members.
-    fn is_subset_of(&self, union: &Union<T>) -> bool {
+    fn is_subset_of(&self, union: &Union<M>) -> bool {
         union.iter().any(|m| self.is_subset_of(m))
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Sequence<T> {
+impl<T, M> set::IsSubsetOf<Repetition<M>> for Sequence<T>
+    where T: set::IsSubsetOf<M>
+{
     /// A sequence is a subset of a repetition if the sequence's length is
     /// contained by the repetition's count and all members of the sequence are
     /// subsets of the repeated element.
-    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
-        rep.count().contains(self.len()) && self.iter().all(|elt| elt.is_subset_of(rep.element()))
+    fn is_subset_of(&self, rep: &Repetition<M>) -> bool {
+        rep.count().contains(self.len()) && self.iter().all(|elt| elt.is_subset_of(rep.value()))
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<T> {
+impl<T: Atom> set::IsSubsetOf<Element<T>> for Sequence<Element<T>> {
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
         match elt {
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
             &Element::Sequence(ref s) => self.is_subset_of(s),
             &Element::Union(ref u) => self.is_subset_of(u),
-            &Element::Repeat(ref r) => self.is_subset_of(r),
+            &Element::Repeat(ref r) => self.is_subset_of(&**r),
 
             &Element::Anchor(ref a) => self.is_subset_of(a),
             &Element::Atom(ref a) => self.is_subset_of(a),

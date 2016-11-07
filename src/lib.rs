@@ -19,9 +19,10 @@
 // `range_contains`, `inclusive_range`, and `inclusive_range_syntax` are
 // required in the `pattern` module, where we use them for checking whether
 // particular atoms are members of a range in an atom class.
+// `pattern::RepeatCount` implements `From<RangeToInclusive<usize>>`.
 #![feature(range_contains)]
 #![feature(inclusive_range_syntax)]
-#![cfg_attr(feature = "pattern_class", feature(inclusive_range))]
+#![feature(inclusive_range)]
 
 // `conservative_impl_trait` is used to provide iterators from various types
 // without resorting to unwieldy workarounds or viral proliferation of

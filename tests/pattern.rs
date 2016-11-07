@@ -25,24 +25,24 @@ mod sequence {
     #[test]
     fn test_reduce() {
         let seq_of_seqs = Sequence::from_iter(["abc", "def", "ghi"].iter().map(|s| Sequence::from_iter(s.chars().map(|c| c.into())).into()));
-        let flat_seq = Sequence::<char>::from_iter("abcdefghi".chars().map(|c| c.into()));
+        let flat_seq = Sequence::<Element<char>>::from_iter("abcdefghi".chars().map(|c| c.into()));
 
         assert!(seq_of_seqs != flat_seq);
         assert_eq!(Some(Element::Sequence(flat_seq)), seq_of_seqs.reduce());
 
         // Empty sequences should reduce to `None`
-        assert_eq!(None, Sequence::<char>::from_iter(iter::empty()).reduce());
+        assert_eq!(None, Sequence::<Element<char>>::from_iter(iter::empty()).reduce());
 
         // Unit-length sequences should reduce to their only element.
-        assert_eq!(Some(Element::Wildcard), Sequence::<char>::from_iter(vec![Element::Wildcard]).reduce());
+        assert_eq!(Some(Element::Wildcard), Sequence::<Element<char>>::from_iter(vec![Element::Wildcard]).reduce());
     }
 
     #[test]
     fn test_is_subset_of() {
-        let unions = (&["abc", "def", "ghi"]).iter().map(|s| Union::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
+        let unions = (&["abc", "def", "ghi"]).iter().map(|s| Union::<Element<char>>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
         #[cfg(feature = "pattern_class")]
         let classes = (&["abc", "def", "ghi"]).iter().map(|s| Class::<char>::from_iter(s.chars())).collect::<Vec<_>>();
-        let seqs = (&["adg", "beh", "cfi"]).iter().map(|s| Sequence::<char>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
+        let seqs = (&["adg", "beh", "cfi"]).iter().map(|s| Sequence::<Element<char>>::from_iter(s.chars().map(|c| c.into()))).collect::<Vec<_>>();
         let useq = Sequence::from_iter(unions.iter().map(|u| Element::Union(u.clone())));
         #[cfg(feature = "pattern_class")]
         let cseq = Sequence::from_iter(classes.iter().map(|c| Element::Class(c.clone())));
@@ -86,7 +86,7 @@ mod union {
 
     #[test]
     fn test_contains() {
-        let u = Union::from_iter("abc".chars().map(|c| c.into()));
+        let u = Union::<char>::from_iter("abc".chars().map(|c| c.into()));
         assert!(u.contains('a'));
         assert!(u.contains('b'));
         assert!(u.contains('c'));
@@ -95,7 +95,7 @@ mod union {
     #[test]
     fn test_is_subset_of_union() {
         let u1 = Union::<char>::from_iter("abc".chars().map(|c| c.into()));
-        let u2 = Union::from_iter("abcdef".chars().map(|c| c.into()));
+        let u2 = Union::<char>::from_iter("abcdef".chars().map(|c| c.into()));
         assert!(u1.is_subset_of(&u2));
         assert!(! u2.is_subset_of(&u1));
 

@@ -50,29 +50,40 @@ impl<T: Atom> set::IsSubsetOf<Class<T>> for T {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Union<T>> for T {
+impl<T: Atom> set::IsSubsetOf<Union<T>> for T
+    where T: set::IsSubsetOf<T>
+{
     #[inline]
     fn is_subset_of(&self, union: &Union<T>) -> bool {
         union.iter().any(|m| self.is_subset_of(m))
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Sequence<T>> for T {
+impl<T: Atom> set::IsSubsetOf<Sequence<T>> for T
+    where T: set::IsSubsetOf<T>
+{
     #[inline]
     fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
         seq.len() == 1 && self.is_subset_of(&seq[0])
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Repetition<T>> for T {
+impl<T: Atom> set::IsSubsetOf<Repetition<T>> for T
+    where T: set::IsSubsetOf<T>
+{
     #[inline]
     fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
-        self.is_subset_of(rep.element()) && rep.count().contains(1)
+        self.is_subset_of(rep.value()) && rep.count().contains(1)
     }
 }
 
-
-impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
+impl<T: Atom> set::IsSubsetOf<Element<T>> for T
+    where T: set::IsSubsetOf<T> +
+          set::IsSubsetOf<Repetition<Element<T>>> +
+          set::IsSubsetOf<Sequence<Element<T>>> +
+          set::IsSubsetOf<Union<Element<T>>> +
+          set::IsSubsetOf<Anchor<T>>
+{
     fn is_subset_of(&self, elt: &Element<T>) -> bool {
         match elt {
             &Element::Wildcard => true,
@@ -81,7 +92,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
             #[cfg(feature = "pattern_class")]
             &Element::Class(ref class) => self.is_subset_of(class),
             &Element::Union(ref union) => self.is_subset_of(union),
-            &Element::Repeat(ref rep) => self.is_subset_of(rep),
+            &Element::Repeat(ref rep) => self.is_subset_of(&**rep),
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
 
             &Element::Sequence(ref seq) => self.is_subset_of(seq),
@@ -90,7 +101,6 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for T {
         }
     }
 }
-
 
 /// Trait for types whose values can be stepped through by increment/decrement
 /// operatons

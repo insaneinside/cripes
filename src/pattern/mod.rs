@@ -230,7 +230,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Anchor<T> {
             &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
             &Element::Sequence(ref s) => self.is_subset_of(s),
             &Element::Union(ref u) => self.is_subset_of(u),
-            &Element::Repeat(ref r) => self.is_subset_of(r),
+            &Element::Repeat(ref r) => self.is_subset_of(&**r),
 
             &Element::Anchor(ref a) => self.is_subset_of(a),
             &Element::Atom(ref a) => self.is_subset_of(a),
@@ -268,30 +268,30 @@ impl<T: Atom> set::IsSubsetOf<Class<T>> for Anchor<T> {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Union<T>> for Anchor<T> {
+impl<T: Atom> set::IsSubsetOf<Union<Element<T>>> for Anchor<T> {
     /// An anchor is a subset of a union if it is a subset of any member of
     /// the union.
     #[inline]
-    fn is_subset_of(&self, union: &Union<T>) -> bool {
+    fn is_subset_of(&self, union: &Union<Element<T>>) -> bool {
         union.iter().any(|elt| match elt { &Element::Anchor(ref t) if t == self => true, _ => false })
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Anchor<T> {
+impl<T: Atom> set::IsSubsetOf<Sequence<Element<T>>> for Anchor<T> {
     /// An anchor is a subset of a sequence if that sequence has length one and
     /// the anchor is a subset of the sequence's first element.
     #[inline]
-    fn is_subset_of(&self, seq: &Sequence<T>) -> bool {
+    fn is_subset_of(&self, seq: &Sequence<Element<T>>) -> bool {
         seq.len() == 1 && self.is_subset_of(&seq[0])
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Anchor<T> {
+impl<T: Atom> set::IsSubsetOf<Repetition<Element<T>>> for Anchor<T> {
     /// An anchor is a subset of a repetition if it is a subset of the repeated
     /// element and the repeat-count includes 1.
     #[inline]
-    fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
-        self.is_subset_of(rep.element()) && rep.count().contains(1)
+    fn is_subset_of(&self, rep: &Repetition<Element<T>>) -> bool {
+        self.is_subset_of(rep.value()) && rep.count().contains(1)
     }
 }
 
@@ -315,16 +315,16 @@ pub enum Element<T: Atom> {
     Anchor(Anchor<T>),
 
     /// Sequence or concatenation of elements.
-    Sequence(Sequence<T>),
+    Sequence(Sequence<Element<T>>),
 
     /// Alternation (union) of elements.
-    Union(Union<T>),
+    Union(Union<Element<T>>),
 
     /// Repeated element.
     ///
     /// No provision is made for non-greedy repetition; instead we label
     /// defective those patterns for which it would be required.
-    Repeat(Repetition<T>),
+    Repeat(Box<Repetition<Element<T>>>),
 
 
     /// Captured element
@@ -493,7 +493,7 @@ impl<T: Atom> Element<T> {
             Element::Anchor(a) => Element::Anchor(a.map_atoms(f)),
             Element::Sequence(s) => Element::Sequence(s.map_atoms(f)),
             Element::Union(u) => Element::Union(u.map_atoms(f)),
-            Element::Repeat(rep) => Element::Repeat(rep.map_atoms(f)),
+            Element::Repeat(rep) => Element::Repeat(Box::new(rep.map_atoms(f))),
             Element::Tagged{element, name} => Element::Tagged{element: Box::new(element.map_atoms(f)), name: name},
             Element::Not(element) => Element::not(element.map_atoms(f)),
         }
@@ -529,7 +529,7 @@ impl<T: Atom> set::Contains<T> for Element<T> {
             &Element::Class(ref c) => c.contains(atom),
             &Element::Sequence(ref s) => s.contains(atom),
             &Element::Union(ref u)  => u.contains(atom),
-            &Element::Repeat(ref r) => r.contains(atom),
+            &Element::Repeat(ref r) => (**r).contains(atom),
             &Element::Tagged{ref element, ..} => element.contains(atom),
             &Element::Anchor(_) => false,
             &Element::Not(ref element) => ! element.contains(atom),
@@ -548,7 +548,7 @@ macro_rules! element_is_subset_of_impl {
                     &Element::Sequence(ref s) => s.is_subset_of($name),
                     &Element::Union(ref u) => u.is_subset_of($name),
                     &Element::Tagged{ref element, ..} => (&**element).is_subset_of($name),
-                    &Element::Repeat(ref r) => r.is_subset_of($name),
+                    &Element::Repeat(ref r) => (&**r).is_subset_of($name),
                     &Element::Anchor(ref a) => a.is_subset_of($name),
                     &Element::Not(ref element) => ! (&**element).is_subset_of($name),
                 }
@@ -574,11 +574,11 @@ element_is_subset_of_impl! {
 }
 
 element_is_subset_of_impl! {
-    T, Repetition<T>, rep, self;
+    T, Repetition<Element<T>>, rep, self;
 
     &Element::Atom(_) |
     &Element::Wildcard
-        => self.is_subset_of(rep.element()) && rep.count().contains(1)
+        => self.is_subset_of(rep.value()) && rep.count().contains(1)
 }
 
 #[cfg(feature = "pattern_class")]
@@ -588,24 +588,25 @@ element_is_subset_of_impl! {
     &Element::Wildcard => false
 }
 element_is_subset_of_impl! {
-    T, Union<T>, union, self;
+    T, Union<Element<T>>, union, self;
     &Element::Atom(a) => union.contains(a),
     &Element::Wildcard => union.iter().any(|elt| Element::Wildcard.is_subset_of(elt))
 }
 
 
 element_is_subset_of_impl! {
-    T, Sequence<T>, seq, self;
+    T, Sequence<Element<T>>, seq, self;
     &Element::Atom(_) => false,
     &Element::Wildcard => false
 }
 
-impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
+impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T>
+{
     fn is_subset_of(&self, other: &Element<T>) -> bool {
         match self {
             &Element::Wildcard => match other {
                 &Element::Tagged{ref element, ..} => self.is_subset_of(&**element),
-                &Element::Repeat(ref rep) => self.is_subset_of(rep.element()) && rep.count().contains(1),
+                &Element::Repeat(ref rep) => self.is_subset_of(rep.value()) && rep.count().contains(1),
                 &Element::Union(ref union) => union.iter().any(|m| self.is_subset_of(m)),
                 #[cfg(feature = "pattern_class")]
                 &Element::Class(ref class) => class.is_empty() && class.polarity() == Polarity::INVERTED,
@@ -618,7 +619,7 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Element<T> {
                     => false,
                 &Element::Not(ref element) => ! self.is_subset_of(&**element),
             },
-            &Element::Atom(a) => a.is_subset_of(other),
+            &Element::Atom(a) => <T as set::IsSubsetOf<Element<T>>>::is_subset_of(&a, other),
             #[cfg(feature = "pattern_class")]
             &Element::Class(ref c) => c.is_subset_of(other),
             &Element::Sequence(ref s) => s.is_subset_of(other),
@@ -793,7 +794,7 @@ macro_rules! element_from_expr_impl {
                                         unsupported!(Expr::Repeat{e: e, r: r, greedy: greedy}, "non-greedy repetition")
                                     } else {
                                         match (*e).try_into() {
-                                            Ok(elt) => Ok(Element::Repeat(Repetition::new(elt, r.into()))),
+                                            Ok(elt) => Ok(Element::Repeat(Box::new(Repetition::new(elt, r.into())))),
                                             Err(e) => Err(e)
                                         }
                                     } },
@@ -841,6 +842,9 @@ element_from_atom_impl!(u8 => ByteOrChar);
 element_from_atom_impl!(char => ByteOrChar);
 
 
+// ----------------------------------------------------------------
+// Conversions from variant value-types
+
 macro_rules! element_from_variant_impl {
     ($T: ident, $Ty: ty, $variant: ident) => {
         impl<$T: Atom> From<$Ty> for Element<$T> {
@@ -851,16 +855,19 @@ macro_rules! element_from_variant_impl {
     };
 }
 
-// ----------------------------------------------------------------
-// Conversions from variant value-types
-
 element_from_variant_impl!(T, T, Atom);
 #[cfg(feature = "pattern_class")]
 element_from_variant_impl!(T, Class<T>, Class);
 element_from_variant_impl!(T, Anchor<T>, Anchor);
-element_from_variant_impl!(T, Sequence<T>, Sequence);
-element_from_variant_impl!(T, Union<T>, Union);
-element_from_variant_impl!(T, Repetition<T>, Repeat);
+element_from_variant_impl!(T, Sequence<Element<T>>, Sequence);
+element_from_variant_impl!(T, Union<Element<T>>, Union);
+
+impl<T: Atom> From<Repetition<Element<T>>> for Element<T> {
+    fn from(rep: Repetition<Element<T>>) -> Self {
+        Element::Repeat(rep.into())
+    }
+}
+
 
 impl Display for Element<char> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
