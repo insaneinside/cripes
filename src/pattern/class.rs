@@ -220,7 +220,7 @@ impl<T: Atom> set::Contains<T> for Class<T> {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<T> for Class<T> {
+impl<T: Atom + Step> set::IsSubsetOf<T> for Class<T> {
     /// A class *can* be a subset of an atom -- as long as that atom is the
     /// only member of the class!
     #[inline]
@@ -247,11 +247,11 @@ impl<T: Atom> super::AtomicLen for Class<T> {
 // FIXME [optimize] I suspect that we need some sort of specialized data
 // structure or clever algorithm in order to perform this test in a time better
 // than O(N·M).
-impl<T: Atom> set::IsSubsetOf<Class<T>> for Class<T> {
+impl<T: Atom + Step> set::IsSubsetOf<Class<T>> for Class<T> {
     /// A class `A` is a subset of another class `B` if all atoms in `A` are
     /// also in `B`.
     fn is_subset_of(&self, other: &Self) -> bool {
-        self.iter().all(|a| other.contains(a))
+        self.iter().all(|m| other.contains(m))
     }
 }
 impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Class<T> {
@@ -264,7 +264,7 @@ impl<T: Atom> set::IsSubsetOf<Sequence<T>> for Class<T> {
     }
 }
 
-impl<T: Atom> set::IsSubsetOf<Union<T>> for Class<T> {
+impl<T: Atom + Step> set::IsSubsetOf<Union<T>> for Class<T> {
     /// A class is a subset of a union if all members of the class are subsets
     /// of the union.
     fn is_subset_of(&self, union: &Union<T>) -> bool {
@@ -272,7 +272,7 @@ impl<T: Atom> set::IsSubsetOf<Union<T>> for Class<T> {
     }        
 }
 
-impl<T: Atom> set::IsSubsetOf<Repetition<T>> for Class<T> {
+impl<T: Atom + Step> set::IsSubsetOf<Repetition<T>> for Class<T> {
     fn is_subset_of(&self, rep: &Repetition<T>) -> bool {
         self.iter().all(|a| a.is_subset_of(rep.element())) && rep.count().contains(1)
     }
@@ -299,7 +299,6 @@ impl<T: Atom> set::IsSubsetOf<Element<T>> for Class<T> {
         }
     }
 }
-                
 
 impl<T: Atom, U> FromIterator<U> for Class<T>
 where ClassMember<T>: From<U> {
