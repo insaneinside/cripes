@@ -1,6 +1,7 @@
 //! Data structures and implementations for union-of-patterns.
 
 use std::mem;
+use std::usize;
 use std::cmp::Ordering;
 use std::iter::FromIterator;
 
@@ -12,6 +13,7 @@ use super::{Atom, Element};
 use super::Class;
 
 use super::{Reduce, flatten_and_reduce};
+use super::SizeBound;
 
 // To hide the implementation details, we wrap the type alias in
 // a private submodule.
@@ -57,6 +59,20 @@ impl<T> Union<T> {
     /// Add a member ot the union
     pub fn push(&mut self, t: T) {
         self.0.push(t);
+    }
+}
+
+impl<T: Atom> super::AtomicLen for Union<Element<T>> {
+    fn atomic_len(&self) -> SizeBound {
+        use std::cmp::{min, max};
+
+        let b = self.iter()
+            .map(|elt| elt.atomic_len())
+            .fold((usize::MAX, usize::MIN),
+                  |accum, eb| (min(accum.0, eb.min()),
+                               max(accum.1, eb.max())));
+        if b.0 == b.1 { SizeBound::Exact(b.0) }
+        else { SizeBound::Range(b.0, b.1) }
     }
 }
 

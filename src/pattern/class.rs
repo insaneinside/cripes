@@ -238,6 +238,12 @@ impl<T: Atom> set::IsSubsetOf<Anchor<T>> for Class<T> {
 }
 
 
+impl<T: Atom> super::AtomicLen for Class<T> {
+    fn atomic_len(&self) -> super::SizeBound {
+        super::SizeBound::Exact(1)
+    }
+}
+
 // FIXME [optimize] I suspect that we need some sort of specialized data
 // structure or clever algorithm in order to perform this test in a time better
 // than O(N·M).

@@ -11,6 +11,7 @@ use util::set;
 use super::{Anchor, Atom, Element, Sequence, Union};
 #[cfg(feature = "pattern_class")]
 use super::Class;
+use super::{AtomicLen, SizeBound};
 
 /// Repeated pattern element.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -74,6 +75,19 @@ impl<T> Repetition<T> {
         Repetition{value: self.value, count: new_count}
     }
 
+}
+
+impl<T: Atom> AtomicLen for Repetition<Element<T>> {
+    fn atomic_len(&self) -> SizeBound {
+        let b = self.value().atomic_len();
+        let (min, max) = (self.count.min() * b.min(), self.count.max().map(|v| v * b.max()));
+        if let Some(max) = max {
+            if min == max { SizeBound::Exact(min) }
+            else { SizeBound::Range(min, max) }
+        } else {
+            SizeBound::Range(min, ::std::usize::MAX)
+        }
+    }
 }
 
 impl<T, U> super::MapAtoms<T, U> for Repetition<Element<T>>

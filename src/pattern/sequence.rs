@@ -80,6 +80,13 @@ impl<T> ::std::iter::Extend<T> for Sequence<T> {
 // ----------------------------------------------------------------
 
 
+impl<T: Atom> super::AtomicLen for Sequence<Element<T>> {
+    fn atomic_len(&self) -> super::SizeBound {
+        self.iter().map(|elt| elt.atomic_len()).sum()
+    }
+}
+
+
 impl<T, U> super::MapAtoms<T, U> for Sequence<Element<T>>
     where T: Atom, U: Atom
 {
