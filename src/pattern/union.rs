@@ -11,7 +11,7 @@ use util::set::{self, IsSubsetOf};
 use super::{Atom, Element};
 #[cfg(feature = "pattern_class")]
 use super::Class;
-
+use super::build::*;
 use super::{Reduce, flatten_and_reduce};
 use super::SizeBound;
 
@@ -155,6 +155,32 @@ apply_attrs! {
         impl_union_from!(u8, regex_syntax::ByteClass, cr => (cr.start...cr.end).map(|c| c.into()));
         impl_union_from!(ByteOrChar, regex_syntax::CharClass, cr => char_iter::new(cr.start, cr.end).map(|c| c.into()));
         impl_union_from!(ByteOrChar, regex_syntax::ByteClass, cr => (cr.start...cr.end).map(|c| c.into()));
+    }
+}
+
+// ----------------------------------------------------------------
+
+impl<T> Or<T> for Union<T> {
+    type Output = Self;
+    fn or(mut self, t: T) -> Self::Output {
+        self.push(t);
+        self
+    }
+}
+
+impl<T> Or<Union<T>> for T {
+    type Output = Union<T>;
+    fn or(self, union: Union<T>) -> Self::Output {
+        union.or(self)
+    }
+}
+
+
+impl<T> Or<Union<T>> for Union<T> {
+    type Output = Self;
+    fn or(mut self, union: Union<T>) -> Self::Output {
+        self.0.extend(union.into_inner());
+        self
     }
 }
 

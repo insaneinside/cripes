@@ -7,6 +7,8 @@ use std::iter::FromIterator;
 use util::set::{self, Contains};
 use super::{Anchor, Atom, Element, Repetition, Union};
 use super::{Reduce, flatten_and_reduce};
+use super::build::*;
+
 #[cfg(feature = "pattern_class")]
 use super::Class;
 
@@ -74,6 +76,31 @@ impl<T> ::std::iter::Extend<T> for Sequence<T> {
         where I: IntoIterator<Item=T>
     {
         self.0.extend(iter)
+    }
+}
+
+impl<T> Then<T> for Sequence<T> {
+    type Output = Self;
+    fn then(mut self, t: T) -> Self::Output {
+        self.push(t);
+        self
+    }
+}
+
+impl<T> Then<Sequence<T>> for T {
+    type Output = Sequence<T>;
+    fn then(self, mut seq: Sequence<T>) -> Self::Output {
+        seq.insert(0, self);
+        seq
+    }
+}
+
+
+impl<T> Then<Sequence<T>> for Sequence<T> {
+    type Output = Self;
+    fn then(mut self, seq: Sequence<T>) -> Self::Output {
+        self.0.extend(seq.into_inner().into_iter());
+        self
     }
 }
 

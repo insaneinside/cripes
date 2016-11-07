@@ -71,6 +71,7 @@ mod repetition;
 #[cfg(feature = "pattern_class")]
 mod class;
 
+pub mod build;
 pub mod codegen;
 
 pub use self::atom::*;
