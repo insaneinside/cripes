@@ -5,12 +5,13 @@ use std::io;
 use std::char;
 use std::iter;
 use std::usize;
-use std::ops::{Add, AddAssign, Range};
 #[cfg(all(test, feature = "pattern_class"))]
 use std::iter::FromIterator;
 
 #[cfg(feature = "pattern_class")]
 use super::{Atom, Class, ClassMember};
+
+use super::SizeBound;
 
 // ================================================================
 /// Trait for atom types that can be converted to byte sequences.
@@ -27,7 +28,7 @@ pub trait Bytes<'a> {
 pub trait SizedRead {
     /// Get the size of this object when read directly from something
     /// implementing `std::io::Read`.
-    fn read_size(&self) -> ReadSize;
+    fn read_size(&self) -> SizeBound;
 }
 
 /// Trait for use with fixed-size types
@@ -36,81 +37,6 @@ pub trait ReadToBuffer {
     /// stream, placing them into the supplied buffer.
     fn read_to_buffer<R>(r: &mut R, dest: &mut [u8], max_count: usize) -> io::Result<usize>
         where R: io::Read;
-}
-
-/// Possible results from `SizedRead::read_size`
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ReadSize {
-    /// Exact size is known in advance
-    Exact(usize),
-
-    /// Size can be within the given range of values.
-    Range(usize, usize)
-}
-
-impl ReadSize {
-    /// Get the minimum number of bytes specified by this ReadSize.
-    #[inline]
-    fn min(&self) -> usize {
-        match self {
-            &ReadSize::Exact(s) => s,
-            &ReadSize::Range(a, _) => a,
-        }
-    }
-    /// Get the maximum number of bytes specified by this ReadSize.
-    #[inline]
-    fn max(&self) -> usize {
-        match self {
-            &ReadSize::Exact(s) => s,
-            &ReadSize::Range(_, b) => b,
-        }
-    }
-
-}
-
-impl iter::Sum<ReadSize> for ReadSize {
-    #[inline]
-    fn sum<I>(iter: I) -> Self where I: Iterator<Item=ReadSize> {
-        let mut sum = ReadSize::Exact(0);
-        for rs in iter {
-            sum += rs;
-        }
-        sum
-    }
-}
-
-impl Add<ReadSize> for ReadSize {
-    type Output = ReadSize;
-    #[inline]
-    fn add(self, rhs: ReadSize) -> Self::Output {
-        let min = self.min() + rhs.min();
-        let max = self.max() + rhs.max();
-        if min == max { ReadSize::Exact(min) }
-        else { ReadSize::Range(min, max) }
-    }
-}
-
-impl AddAssign<ReadSize> for ReadSize {
-    #[inline]
-    fn add_assign(&mut self, rhs: ReadSize) {
-        *self = *self + rhs;
-    }
-}
-
-
-impl From<usize> for ReadSize {
-    #[inline]
-    fn from(s: usize) -> Self {
-        ReadSize::Exact(s)
-    }
-}
-
-impl From<Range<usize>> for ReadSize {
-    #[inline]
-    fn from(r: Range<usize>) -> Self {
-        if r.len() > 1 { ReadSize::Range(r.start, r.end - 1) }
-        else { ReadSize::Exact(r.start) }
-    }
 }
 
 
@@ -127,8 +53,8 @@ impl<'a> Bytes<'a> for u8 {
 
 impl SizedRead for u8 {
     #[inline(always)]
-    fn read_size(&self) -> ReadSize {
-        ReadSize::Exact(1)
+    fn read_size(&self) -> SizeBound {
+        SizeBound::Exact(1)
     }
 }
 
@@ -164,16 +90,16 @@ static UTF8_CHAR_WIDTH: [u8; 256] = [
 4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, // 0xFF
 ];
 
-impl<'a> Bytes<'a> for char {
-    type Iter = char::EncodeUtf8;
+/*impl<'a> Bytes<'a> for char {
+    type Iter = ::std::char::EncodeUtf8;
     fn bytes(&self) -> Self::Iter {
         self.encode_utf8()
     }
-}
+}*/
 
 impl SizedRead for char {
     #[inline]
-    fn read_size(&self) -> ReadSize {
+    fn read_size(&self) -> SizeBound {
         self.len_utf8().into()
     }
 }
@@ -200,8 +126,8 @@ impl ReadToBuffer for char {
 #[cfg(test)]
 #[test]
 fn test_sizedread_char() {
-    assert_eq!(ReadSize::Exact(1), 'a'.read_size());
-    assert_eq!(ReadSize::Exact(3), '✓'.read_size());
+    assert_eq!(SizeBound::Exact(1), 'a'.read_size());
+    assert_eq!(SizeBound::Exact(3), '✓'.read_size());
 }
 
 
@@ -228,12 +154,12 @@ fn test_readable_char() {
 /*impl<T> SizedRead for Transition<T>
     where T: Atom + SizedRead
 {
-    fn read_size(&self) -> ReadSize {
+    fn read_size(&self) -> SizeBound {
         match self {
             &Transition::Atom(a) => a.read_size(),
             &Transition::Literal(ref atoms) => atoms.iter().map(|a| a.read_size()).sum(),
-            &Transition::Wildcard => ReadSize::Range(1, 4),
-            &Transition::Anchor(..) => ReadSize::Exact(0),
+            &Transition::Wildcard => SizeBound::Range(1, 4),
+            &Transition::Anchor(..) => SizeBound::Exact(0),
             &Transition::Class(ref c) => c.read_size(),
         }
     }
@@ -242,10 +168,10 @@ fn test_readable_char() {
 #[cfg(test)]
 #[test]
 fn test_sizedread() {
-    assert_eq!(ReadSize::Exact(1), 'a'.read_size());
-    assert_eq!(ReadSize::Exact(3), '✓'.read_size());
+    assert_eq!(SizeBound::Exact(1), 'a'.read_size());
+    assert_eq!(SizeBound::Exact(3), '✓'.read_size());
     #[cfg(feature = "pattern_class")]
-    assert_eq!(ReadSize::Range(1, 3), Class::from_iter(['x', 'y', '⚔'].into_iter().cloned()).read_size());
+    assert_eq!(SizeBound::Range(1, 3), Class::from_iter(['x', 'y', '⚔'].into_iter().cloned()).read_size());
 }
 
 // ----------------------------------------------------------------
@@ -254,7 +180,7 @@ fn test_sizedread() {
 impl<T> SizedRead for ClassMember<T>
     where T: Atom + SizedRead
 {
-    fn read_size(&self) -> ReadSize {
+    fn read_size(&self) -> SizeBound {
         match self {
             &ClassMember::Atom(a) => a.read_size(),
             &ClassMember::Range(first, last) => {
@@ -274,7 +200,7 @@ impl<T> SizedRead for ClassMember<T>
 impl<T> SizedRead for Class<T>
     where T: Atom + SizedRead
 {
-    fn read_size(&self) -> ReadSize {
+    fn read_size(&self) -> SizeBound {
         let mut min = usize::MAX;
         let mut max = usize::MIN;
 

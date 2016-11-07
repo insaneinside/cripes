@@ -54,8 +54,9 @@
 
 use std;
 use std::{char, u8, u32, usize};
-use std::{ptr, mem};
+use std::{iter, ptr, mem};
 use std::fmt::{self,Display,Debug};
+use std::ops::{Add, AddAssign, Range};
 
 #[cfg(feature="regex")] use std::convert::{TryFrom, TryInto};
 #[cfg(feature="regex")] use std::iter::{FromIterator,IntoIterator};
@@ -97,6 +98,81 @@ pub trait Reduce {
 
     /// Reduce the receiver.
     fn reduce(self) -> Self::Output;
+}
+
+/// A bound on some expected integer-typed size value.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum SizeBound {
+    /// Exact size is known in advance
+    Exact(usize),
+
+    /// Size can be within the given range of values.
+    Range(usize, usize)
+}
+
+impl SizeBound {
+    /// Get the minimum number of bytes specified by this SizeBound.
+    #[inline]
+    fn min(&self) -> usize {
+        match self {
+            &SizeBound::Exact(s) => s,
+            &SizeBound::Range(a, _) => a,
+        }
+    }
+    /// Get the maximum number of bytes specified by this SizeBound.
+    #[inline]
+    fn max(&self) -> usize {
+        match self {
+            &SizeBound::Exact(s) => s,
+            &SizeBound::Range(_, b) => b,
+        }
+    }
+
+}
+
+impl iter::Sum<SizeBound> for SizeBound {
+    #[inline]
+    fn sum<I>(iter: I) -> Self where I: Iterator<Item=SizeBound> {
+        let mut sum = SizeBound::Exact(0);
+        for rs in iter {
+            sum += rs;
+        }
+        sum
+    }
+}
+
+impl Add<SizeBound> for SizeBound {
+    type Output = SizeBound;
+    #[inline]
+    fn add(self, rhs: SizeBound) -> Self::Output {
+        let min = self.min() + rhs.min();
+        let max = self.max() + rhs.max();
+        if min == max { SizeBound::Exact(min) }
+        else { SizeBound::Range(min, max) }
+    }
+}
+
+impl AddAssign<SizeBound> for SizeBound {
+    #[inline]
+    fn add_assign(&mut self, rhs: SizeBound) {
+        *self = *self + rhs;
+    }
+}
+
+
+impl From<usize> for SizeBound {
+    #[inline]
+    fn from(s: usize) -> Self {
+        SizeBound::Exact(s)
+    }
+}
+
+impl From<Range<usize>> for SizeBound {
+    #[inline]
+    fn from(r: Range<usize>) -> Self {
+        if r.len() > 1 { SizeBound::Range(r.start, r.end - 1) }
+        else { SizeBound::Exact(r.start) }
+    }
 }
 
 // ================================================================
