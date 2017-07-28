@@ -28,6 +28,7 @@ pub mod iter;
 pub mod interface;
 pub mod transform;
 pub mod visit;
+pub mod algo;
 
 pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
 pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
