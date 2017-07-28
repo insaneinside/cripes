@@ -34,7 +34,7 @@ pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
 pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
 pub use self::interface::{Id, Edge, Node, Graph, ConcreteGraph, ConcreteGraphMut};
 pub use self::interface::{DirectedGraph, DirectedEdge, DirectedNode, DirectedNodeMut};
-pub use self::transform::{Build, Builder, Target};
+pub use self::transform::{Build, BuildNodes, BuildFull, Builder, Target};
 
 /// Simple data-bearing directed graph.  `N` determines the type of data
 /// attached to nodes, `E` the type attached to edges, and `Ix` the integer

@@ -2,7 +2,7 @@
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::default::Default;
-use super::interface::{Graph, ConcreteGraphMut, Id};
+use super::interface::{ConcreteGraphMut, Id};
 use util::splitvec::SplitVec;
 
 // ----------------------------------------------------------------
@@ -91,22 +91,33 @@ impl<I> Target<I> where I: Id {
 
 /// Trait describing bounds on graph-construction functions and closures passed
 /// to `Builder`'s methods.
-pub trait BuildFn<G, I>: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
+pub trait BuildFn<G, I>: FnMut(&mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
     where G: ConcreteGraphMut
 {}
 
 impl<G, I, F> BuildFn<G, I> for F
-    where F: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId,
+    where F: FnMut(&mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId,
+          G: ConcreteGraphMut
+{}
+
+/// Trait describing bounds on graph-construction functions and closures passed
+/// to `Builder` that are only called once.
+pub trait BuildOnceFn<G, I>: FnOnce(&mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
+    where G: ConcreteGraphMut
+{}
+
+impl<G, I, F> BuildOnceFn<G, I> for F
+    where F: FnOnce(&mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId,
           G: ConcreteGraphMut
 {}
 
 /// Closure type used when a new node must be created on a graph
-pub trait NodeFn<G, E>: Fn(&mut G, &E) -> G::NodeId
+pub trait NodeFn<G, E>: FnMut(&mut G, &E) -> G::NodeId
     where G: ConcreteGraphMut
 {}
 
 impl<G, E, F> NodeFn<G, E> for F
-    where F: Fn(&mut G, &E) -> G::NodeId,
+    where F: FnMut(&mut G, &E) -> G::NodeId,
           G: ConcreteGraphMut
 {}
 
@@ -130,9 +141,25 @@ pub struct Builder<G>
 impl<G> Builder<G> where G: ConcreteGraphMut
 {
     /// Create an empty `Builder` instance for the given entry node
-    pub fn new(g: G, entry: G::NodeId) -> Self {
+    pub fn new() -> Self
+        where G: Default
+    {
+        Builder{graph: RefCell::new(Default::default()),
+                inputs: SplitVec::new(),
+                outputs: SplitVec::new()}
+    }
+
+    /// Create a new Builder with the specified graph and (optionally)
+    /// entry node.
+    pub fn with_graph(g: G, entry: Option<G::NodeId>) -> Self {
+        let inputs =
+            if let Some(entry) = entry {
+                vec![entry].into()
+            } else {
+                SplitVec::new()
+            };
         Builder{graph: RefCell::new(g),
-                inputs: vec![entry].into(),
+                inputs: inputs,
                 outputs: SplitVec::new()}
     }
 
@@ -163,15 +190,15 @@ impl<G> Builder<G> where G: ConcreteGraphMut
 
     /// Run the given function or closure, providing mutable access to the
     /// underlying graph.
-    pub fn with_graph_mut<F>(&mut self, f: F)
-        where F: FnOnce(&Self, RefMut<G>) {
-        f(self, self.graph.borrow_mut());
+    pub fn with_graph_mut<F, R>(&mut self, f: F) -> R
+        where F: FnOnce(&Self, RefMut<G>) -> R {
+        f(self, self.graph.borrow_mut())
     }
 
     /// Append an edge between all inputs for the stage and some target node.
     ///
     ///
-    pub fn append_edge<E, F>(&mut self, tgt: Target<G::NodeId>, e: E, f: F) -> G::NodeId
+    pub fn append_edge<E, F>(&mut self, tgt: Target<G::NodeId>, e: E, mut f: F) -> G::NodeId
         where F: NodeFn<G, E>,
               (G::NodeId, G::NodeId, E): Into<G::Edge>,
               E: Clone
@@ -219,7 +246,7 @@ impl<G> Builder<G> where G: ConcreteGraphMut
                                   source: G::NodeId,
                                   target: Target<G::NodeId>,
                                   e: E,
-                                  f: F) -> G::NodeId
+                                  mut f: F) -> G::NodeId
         where F: NodeFn<G, E>,
               (G::NodeId, G::NodeId, E): Into<G::Edge>,
               E: Clone
@@ -250,7 +277,7 @@ impl<G> Builder<G> where G: ConcreteGraphMut
 
     /// Build _within_ the current stage, preserving the list of stage inputs.
     pub fn recurse<F, I>(&mut self, next: Target<G::NodeId>, input: I, build: F) -> G::NodeId
-        where F: for<'a> FnOnce(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
+        where F: BuildOnceFn<G, I>
     {
         self.inputs.dedup();
 
@@ -272,13 +299,13 @@ impl<G> Builder<G> where G: ConcreteGraphMut
     /// a stage output.
     ///
     /// This method will **panic** if called with an empty iterator.
-    pub fn chain<F, I, R>(&mut self, target: Target<G::NodeId>, input: R, build: F) -> G::NodeId
+    pub fn chain<F, I, R>(&mut self, target: Target<G::NodeId>, input: R, mut build: F) -> G::NodeId
         where R: IntoIterator<Item=I>,
-              F: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId
+              F: BuildFn<G, I>,
     {
         let mut o = None;
         let mut iter = input.into_iter().peekable();
-        let build = &build;
+        let build = &mut build;
 
         self.inputs.push_and_copy_state();
         self.outputs.push_state();
@@ -316,14 +343,13 @@ impl<G> Builder<G> where G: ConcreteGraphMut
 
     /// Build subgraphs from the elements of an iterator between the current
     /// stage's inputs and some specified output.
-    pub fn branch<F, I, R>(&mut self, target: Target<G::NodeId>, input: R, build: F) -> G::NodeId
+    pub fn branch<F, I, R>(&mut self, target: Target<G::NodeId>, input: R, mut build: F) -> G::NodeId
         where R: IntoIterator<Item=I>,
-              F: for<'a> Fn(&'a mut Builder<G>, Target<G::NodeId>, I) -> G::NodeId//BuildFn<G, I>
+              F: BuildFn<G, I> + BuildOnceFn<G, I>,
     {
-        let build = &build;
         let mut target = target;
         for elt in input {
-            target = Target::Output(self.recurse(target, elt.into(), build));
+            target = Target::Output(self.recurse(target, elt.into(), &mut build));
         }
         target.unwrap_id()
     }
@@ -344,37 +370,41 @@ impl<G> Builder<G> where G: ConcreteGraphMut
 
 // ----------------------------------------------------------------
 
-/// Graph-building interface.
-pub trait Build<G: ConcreteGraphMut> {
-    /// Type from which the graph is built.
-    type Input;
-
+/// Trait encapsulating node-creation methods for the Build trait family.
+pub trait BuildNodes<G, I>
+    where G: ConcreteGraphMut
+{
     /// Create the entry node for the given input, returning its ID.
-    fn entry_node(g: &mut G, input: &Self::Input) -> G::NodeId;
+    fn entry_node(&mut self, g: &mut G, input: &I) -> G::NodeId;
 
     /// Create the target node for the given edge data, returning the ID of the
     /// new node.
-    fn target_node<E>(g: &mut G, e: &E) -> G::NodeId
+    fn target_node<E>(&mut self, g: &mut G, e: &E) -> G::NodeId
         where (G::NodeId, G::NodeId, E): Into<G::Edge>;
+}
 
 
+/// Composable graph-building interface for arbitrary element types.
+pub trait Build<G, I>
+    where G: ConcreteGraphMut
+{
+    /// Construct the graph stage for the given input and target node.
+    ///
+    /// Returns the actual ID of the target node used, if any
+    fn build(&mut self, builder: &mut Builder<G>,
+             next: Target<G::NodeId>,
+             input: I) -> G::NodeId;
+}
+
+/// Graph-building interface.
+pub trait BuildFull<G, I>: Build<G, I> + BuildNodes<G, I>
+    where G: ConcreteGraphMut
+{
 
     /// Perform any finalization on the builder or the built graph.
     #[inline]
-    fn finish(_: &mut Builder<G>) {
+    fn finish(&mut self, &mut Builder<G>) {
     }
-
-    /// Recursively build the graph for the given input data.
-    ///
-    /// @param b Builder instance to use for building the graph
-    ///
-    /// @param next Output to which the stage built from this input data should
-    /// connect
-    ///
-    /// @param input
-    fn build_recursive(b: &mut Builder<G>,
-                       next: Target<G::NodeId>,
-                       input: Self::Input) -> G::NodeId;
 
     // /// Create a subgraph describing the given input, and return its
     // /// entry and exit node IDs.
@@ -391,14 +421,16 @@ pub trait Build<G: ConcreteGraphMut> {
     /// Convert the given input into a graph.
     ///
     /// Returns the resulting graph and the entry node.
-    fn build(input: Self::Input) -> (G, G::NodeId)
-        where G: Default {
+    fn build_full(mut self, input: I) -> (G, G::NodeId)
+        where Self: Sized,
+              G: Default
+    {
         let mut g = G::new();
-        let entry = Self::entry_node(&mut g, &input);
+        let entry = self.entry_node(&mut g, &input);
 
-        let mut builder = Builder::new(g, entry);
-        Self::build_recursive(&mut builder, Target::AutoOutput, input);
-        Self::finish(&mut builder);
+        let mut builder = Builder::with_graph(g, Some(entry));
+        self.build(&mut builder, Target::AutoOutput, input);
+        self.finish(&mut builder);
         (builder.finish(), entry)
     }
 }
