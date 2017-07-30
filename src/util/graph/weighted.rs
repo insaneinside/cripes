@@ -115,10 +115,10 @@ impl<'a, T, I: Id, I2: Copy> From<&'a (I2, I2, T)> for Edge<T, I>
 /// `Deref` implementation.
 ///
 /// ```rust
-/// use cripes::util::graph::{EdgeIndex,WeightedNode};
+/// use cripes_core::util::graph::{EdgeId,WeightedNode};
 ///
 /// # fn main() {
-/// let n = WeightedNode::<_, EdgeIndex<u8>>::new(32);
+/// let n = WeightedNode::<_, EdgeId<u8>>::new(32);
 /// assert_eq!(32, *n);
 /// # }
 /// ```

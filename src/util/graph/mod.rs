@@ -30,7 +30,7 @@ pub mod transform;
 pub mod visit;
 pub mod algo;
 
-pub use self::common::{EdgeIndex,NodeIndex,AdjacencyList};
+pub use self::common::{IndexType, DefaultIndexType, EdgeId, NodeId, AdjacencyList};
 pub use self::weighted::{Edge as WeightedEdge, Node as WeightedNode};
 pub use self::interface::{Id, Edge, Node, Graph, ConcreteGraph, ConcreteGraphMut};
 pub use self::interface::{DirectedGraph, DirectedEdge, DirectedNode, DirectedNodeMut};
@@ -39,8 +39,8 @@ pub use self::transform::{Build, BuildNodes, BuildFull, Builder, Target};
 /// Simple data-bearing directed graph.  `N` determines the type of data
 /// attached to nodes, `E` the type attached to edges, and `Ix` the integer
 /// type used to identify nodes and edges.
-pub type WeightedGraph<N, E, Ix = common::DefaultIndexType> = AdjacencyList<WeightedNode<N, EdgeIndex<Ix>>, WeightedEdge<E, NodeIndex<Ix>>>;
+pub type WeightedGraph<N, E, Ix = common::DefaultIndexType> = AdjacencyList<WeightedNode<N, EdgeId<Ix>>, WeightedEdge<E, NodeId<Ix>>>;
 
 /// Unweighted directed graph.  `Ix` determines the integer type used to
 /// identify nodes and edges.
-pub type BasicGraph<Ix = common::DefaultIndexType> = AdjacencyList<basic::Node<EdgeIndex<Ix>>, basic::Edge<NodeIndex<Ix>>>;
+pub type BasicGraph<Ix = common::DefaultIndexType> = AdjacencyList<basic::Node<EdgeId<Ix>>, basic::Edge<NodeId<Ix>>>;

@@ -40,13 +40,13 @@ macro_rules! impl_index_wrapper_type {
 
 /// Type used to identify and index the edges of a graph.
 #[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct EdgeIndex<T: IndexType>(T);
-impl_index_wrapper_type!(EdgeIndex<T>,EdgeIndex,T);
+pub struct EdgeId<T: IndexType>(T);
+impl_index_wrapper_type!(EdgeId<T>,EdgeId,T);
 
 /// Type used to identify and index the nodes of a graph.
 #[derive(Copy, Clone, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct NodeIndex<T: IndexType>(T);
-impl_index_wrapper_type!(NodeIndex<T>,NodeIndex,T);
+pub struct NodeId<T: IndexType>(T);
+impl_index_wrapper_type!(NodeId<T>,NodeId,T);
 
 
 // --------------------------------
@@ -111,6 +111,12 @@ impl<N, E> AdjacencyList<N, E> {
     /// Create an empty AdjacencyList instance.
     pub fn new() -> Self {
         AdjacencyList{nodes: Vec::new(), edges: Vec::new()}
+    }
+
+    /// Remove all nodes and edges (but don't release any allocations)
+    pub fn clear(&mut self) {
+        self.nodes.clear();
+        self.edges.clear();
     }
 }
 
@@ -265,5 +271,5 @@ macro_rules! graph_index_impl {
 
     }
 }
-graph_index_impl!(EdgeIndex<Ix>, N, E, E, edges);
-graph_index_impl!(NodeIndex<Ix>, N, E, N, nodes);
+graph_index_impl!(EdgeId<Ix>, N, E, E, edges);
+graph_index_impl!(NodeId<Ix>, N, E, N, nodes);
