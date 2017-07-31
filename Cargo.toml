@@ -4,7 +4,7 @@ version="0.0.1"
 authors=["Collin J. Sutton"]
 
 [features]
-default = ["regex", "dot"]
+default = ["dot"]
 
 # `pattern_class`: enable the Class pattern element and related variants.
 # Classes are a useful abstraction over unions of single-atom patterns because
@@ -15,9 +15,6 @@ pattern_class = []
 # `dot`:  build binaries for producing state diagrams for grammar automatons in
 # GraphViz `dot` format.
 
-# `regex`: Enable support for converting regular expressions in `regex` syntax
-# to Cripes patterns
-regex = ["regex-syntax"]
 
 [lib]
 name="cripes"
@@ -40,7 +37,5 @@ char-iter = "0.1"
 num-traits = "*"
 smallvec = "*"
 itertools = "*"
-error-chain = "0.5"
 
 dot = { version = "^0.1.0", optional = true }
-regex-syntax = { version = "^0.3.0", optional = true }

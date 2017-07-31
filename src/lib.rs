@@ -33,11 +33,6 @@
 // feature "debug".
 #![feature(stmt_expr_attributes)]
 
-// `TryFrom` is used when converting `regex_syntax::Expr`s to structural
-// patterns, because there are some features of regex_syntax that we simply
-// don't support.
-#![cfg_attr(feature = "regex", feature(try_from))]
-
 #[macro_use] extern crate cripes_macros;
 
 extern crate num_traits;
@@ -45,18 +40,7 @@ extern crate bit_set;
 extern crate smallvec;
 extern crate arrayvec;
 extern crate itertools;
-
-apply_attrs! {
-    cfg(feature="regex") => {
-        extern crate regex_syntax;
-        extern crate char_iter;
-    },
-
-    macro_use => {
-        extern crate bitflags;
-        extern crate error_chain;
-    }
-}
+#[macro_use] extern crate bitflags;
 
 pub mod util;
 pub mod pattern;

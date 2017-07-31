@@ -4,7 +4,6 @@ use std::ops::{BitXor, Sub, Range, RangeInclusive};
 use std::iter::FromIterator;
 use std::fmt::{self, Debug};
 
-#[cfg(feature = "regex")] use regex_syntax;
 use itertools::Itertools;
 
 use super::{Anchor, Atom, ByteOrChar, Element, Repetition, Sequence, Union};
@@ -105,29 +104,14 @@ impl<T: Atom> From<T> for ClassMember<T> {
     fn from(a: T) -> Self { ClassMember::Atom(a) }
 }
 
-impl From<regex_syntax::ClassRange> for ClassMember<ByteOrChar> {
-    fn from(cr: regex_syntax::ClassRange) -> Self {
-        ClassMember::Range(cr.start.into(), cr.end.into())
     }
 }
 
-impl From<regex_syntax::ByteRange> for ClassMember<ByteOrChar> {
-    fn from(cr: regex_syntax::ByteRange) -> Self {
-        ClassMember::Range(cr.start.into(), cr.end.into())
-    }
 }
 
 
-impl From<regex_syntax::ClassRange> for ClassMember<char> {
-    fn from(cr: regex_syntax::ClassRange) -> Self {
-        ClassMember::Range(cr.start, cr.end)
-    }
 }
 
-
-impl From<regex_syntax::ByteRange> for ClassMember<u8> {
-    fn from(cr: regex_syntax::ByteRange) -> Self {
-        ClassMember::Range(cr.start, cr.end)
     }
 }
 
@@ -305,25 +289,5 @@ where ClassMember<T>: From<U> {
     fn from_iter<I>(iter: I) -> Self
         where I: IntoIterator<Item=U> {
         Class{members: Vec::from_iter(iter.into_iter().map(|x| x.into()))}
-    }
-}
-
-apply_attrs! {
-    cfg(feature = "regex") => {
-        macro_rules! impl_class_from {
-            ($T: ty, $from: ty) => {
-                impl From<$from> for Class<$T> {
-                    fn from(c: $from) -> Self {
-                        Self::new(c.into_iter().map(|cr| if cr.end != cr.start { ClassMember::Range(cr.start.into(), cr.end.into()) }
-                                                    else { ClassMember::Atom(cr.start.into()) }))
-                    }
-                }
-            };
-        }
-
-        impl_class_from!(char, regex_syntax::CharClass);
-        impl_class_from!(u8, regex_syntax::ByteClass);
-        impl_class_from!(ByteOrChar, regex_syntax::CharClass);
-        impl_class_from!(ByteOrChar, regex_syntax::ByteClass);
     }
 }

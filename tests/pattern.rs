@@ -11,7 +11,7 @@ macro_rules! extract_variant {
 /// Helper for parsing a regex and returning the inner pattern type.
 macro_rules! from_regex {
     ($s: tt -> Element<$T: ty>) => ( ::cripes::pattern::parse_regex::<$T>($s).unwrap() );
-    ($s: tt -> $which: ident < $T: ty>) => (extract_variant!((::cripes::pattern::parse_regex::<$T>($s).unwrap()) -> $which));
+    ($s: tt -> $which: ident) => (extract_variant!((::cripes::pattern::parse_regexp($s).unwrap()) -> $which));
 }
 
 mod sequence {
@@ -24,7 +24,7 @@ mod sequence {
 
     #[test]
     fn test_reduce() {
-        let seq_of_seqs = Sequence::from_iter(["abc", "def", "ghi"].iter().map(|s| Sequence::from_iter(s.chars().map(|c| c.into())).into()));
+        let seq_of_seqs = Sequence::from_iter(["abc", "def", "ghi"].iter().map(|s| Sequence::<Element<char>>::from_iter(s.chars().map(|c| c.into())).into()));
         let flat_seq = Sequence::<Element<char>>::from_iter("abcdefghi".chars().map(|c| c.into()));
 
         assert!(seq_of_seqs != flat_seq);
@@ -104,10 +104,10 @@ mod union {
     }
     #[test]
     fn test_is_subset_of_sequence() {
-        let seq_of_classes = from_regex!("[abc][def][ghi]" -> Sequence<char>);
-        let seq_of_unions = from_regex!("(a|b|c)(d|e|f)(g|h|i)" -> Sequence<char>);
+        let seq_of_classes = from_regex!("[abc][def][ghi]" -> Sequence);
+        let seq_of_unions = from_regex!("(a|b|c)(d|e|f)(g|h|i)" -> Sequence);
 
-        let union_of_seqs = from_regex!("adg|beh|cfi" -> Union<char>);
+        let union_of_seqs = from_regex!("adg|beh|cfi" -> Union);
         println!("{:?}", union_of_seqs);
         assert_eq!(3, union_of_seqs.len());
 
@@ -118,8 +118,9 @@ mod union {
 
             for i in 0..3 {
                 let s = extract_variant!((ref seq) -> Sequence);
-                println!("{:?} <=> {:?}", s[i], seq_of_unions[i]);
+                println!("{:?}: {:?} <=> {:?}", s, s[i], seq_of_unions[i]);
                 assert!(s[i].is_subset_of(&seq_of_unions[i]));
+                println!("{:?}: {:?} <=> {:?}", s, s[i], seq_of_classes[i]);
                 assert!(s[i].is_subset_of(&seq_of_classes[i]));
             }
 

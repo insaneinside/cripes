@@ -23,9 +23,6 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use bit_set::BitSet;
 
-#[cfg(feature="regex")]
-use regex_syntax;
-
 use pattern::{self, Atom, Enumerable, ByteOrChar, Element, Repetition, RepeatCount};
 #[cfg(feature = "pattern-class")]
 use pattern::{Class, ClassIter};
@@ -776,14 +773,6 @@ macro_rules! impl_nondeterministic_automaton {
             fn next_states(&'a self, state: Self::StateId, input: $C::Atom) -> Self::NextStatesIter {
                 NextStatesIter{graph: &self.0.graph, edges: self.0.graph.outgoing_edges(state), input: input}
             }
-        }
-
-        #[cfg(feature="regex")]
-        impl<A: Atom> From<regex_syntax::Expr> for $N<A>
-            where $N<A>: From<Element<A>>,
-                  Element<A>: From<regex_syntax::Expr>
-        {
-            fn from(e: regex_syntax::Expr) -> Self { <Self as From<Element<_>>>::from(e.into()) }
         }
     }
 }

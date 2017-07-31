@@ -157,30 +157,6 @@ impl<T> FromIterator<T> for Union<T> {
 }
 
 // ----------------------------------------------------------------
-apply_attrs! {
-    cfg(feature = "regex") => {
-        use regex_syntax;
-        use char_iter;
-        use super::ByteOrChar;
-
-        macro_rules! impl_union_from {
-            ($T: ty, $from: ty, $map_input: ident => $map_expr: expr) => {
-                impl From<$from> for Union<Element<$T>> {
-                    fn from(c: $from) -> Self {
-                        Union::from_iter(c.into_iter().flat_map(|$map_input| $map_expr))
-                    }
-                }
-            };
-        }
-
-        impl_union_from!(char, regex_syntax::CharClass, cr => char_iter::new(cr.start, cr.end).map(|c| c.into()));
-        impl_union_from!(u8, regex_syntax::ByteClass, cr => (cr.start...cr.end).map(|c| c.into()));
-        impl_union_from!(ByteOrChar, regex_syntax::CharClass, cr => char_iter::new(cr.start, cr.end).map(|c| c.into()));
-        impl_union_from!(ByteOrChar, regex_syntax::ByteClass, cr => (cr.start...cr.end).map(|c| c.into()));
-    }
-}
-
-// ----------------------------------------------------------------
 
 impl<T> Or<T> for Union<T> {
     type Output = Self;

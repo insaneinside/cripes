@@ -5,8 +5,6 @@ use std::fmt::{self, Debug, Display};
 
 use std::ops::{Range, RangeInclusive, RangeFull, RangeFrom, RangeTo, RangeToInclusive};
 
-#[cfg(feature = "regex")] use regex_syntax::Repeater;
-
 use util::set;
 use super::{Anchor, Atom, Element, Sequence, Union};
 #[cfg(feature = "pattern_class")]
@@ -324,30 +322,6 @@ impl From<RangeFrom<usize>> for RepeatCount {
     }
 }
 
-#[cfg(feature = "regex")]
-impl From<Repeater> for RepeatCount {
-    fn from(r: Repeater) -> Self {
-        match r {
-            Repeater::ZeroOrOne => RepeatCount::AtMost(1),
-            Repeater::ZeroOrMore => RepeatCount::Any,
-            Repeater::OneOrMore => RepeatCount::AtLeast(1),
-            Repeater::Range{min, max} => {
-                if min > 0 {
-                    if let Some(max) = max {
-                        if max != min { RepeatCount::Between(min as usize, max as usize) }
-                        else { RepeatCount::Exact(min as usize) }
-                    } else {
-                        RepeatCount::AtLeast(min as usize)
-                    }
-                } else if let Some(max) = max {
-                    RepeatCount::AtMost(max as usize)
-                } else {
-                    RepeatCount::Any
-                }
-            }
-        }
-    }
-}
 
 impl Debug for RepeatCount {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
