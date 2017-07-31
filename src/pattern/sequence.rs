@@ -113,6 +113,29 @@ impl<T: Atom> super::AtomicLen for Sequence<Element<T>> {
     }
 }
 
+impl<T, U> super::Map<T, U> for Sequence<T> {
+    type Output = Sequence<U>;
+
+    fn map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> U
+    {
+        self.into_iter().map(f).collect()
+    }
+}
+
+
+impl<T, U> super::FilterMap<T, U> for Sequence<T> {
+    type Output = Option<Sequence<U>>;
+
+    fn filter_map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> Option<U>
+    {
+        let values: Vec<U> = self.into_iter().filter_map(f).collect();
+        if values.is_empty() { None }
+        else { Some(Sequence(values)) }
+    }
+}
+
 
 impl<T, U> super::MapAtoms<T, U> for Sequence<Element<T>>
     where T: Atom, U: Atom

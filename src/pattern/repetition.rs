@@ -90,6 +90,28 @@ impl<T: Atom> AtomicLen for Repetition<Element<T>> {
     }
 }
 
+impl<T, U> super::Map<T, U> for Repetition<T> {
+    type Output = Repetition<U>;
+
+    fn map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> U
+    {
+        let (value, count) = self.into_inner();
+        Repetition::new(f(value), count)
+    }
+}
+
+impl<T, U> super::FilterMap<T, U> for Repetition<T> {
+    type Output = Option<Repetition<U>>;
+
+    fn filter_map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> Option<U>
+    {
+        let (value, count) = self.into_inner();
+        f(value).map(|v| Repetition::new(v, count))
+    }
+}
+
 impl<T, U> super::MapAtoms<T, U> for Repetition<Element<T>>
     where T: Atom, U: Atom
 {

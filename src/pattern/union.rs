@@ -76,6 +76,28 @@ impl<T: Atom> super::AtomicLen for Union<Element<T>> {
     }
 }
 
+impl<T, U> super::Map<T, U> for Union<T> {
+    type Output = Union<U>;
+
+    fn map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> U
+    {
+        self.into_iter().map(f).collect()
+    }
+}
+
+impl<T, U> super::FilterMap<T, U> for Union<T> {
+    type Output = Option<Union<U>>;
+
+    fn filter_map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> Option<U>
+    {
+        let values: Vec<U> = self.into_iter().filter_map(f).collect();
+        if values.is_empty() { None }
+        else { Some(Union(values)) }
+    }
+}
+
 impl<T, U> super::MapAtoms<T, U> for Union<Element<T>>
     where T: Atom, U: Atom {
     type Output = Union<Element<U>>;

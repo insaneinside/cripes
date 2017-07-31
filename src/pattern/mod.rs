@@ -101,6 +101,53 @@ pub trait Reduce {
     fn reduce(self) -> Self::Output;
 }
 
+/// Interface for applying the "filter-map" operation to a collection.
+///
+/// This operation calls a closure on each element in the collection.
+///
+///   * If the closure returns `None` the element is simply dropped;
+///   * otherwise the element is replaced with the value returned in `Some`.
+///
+///
+pub trait FilterMap<T, U> {
+    /// Type produced by the `filter_map` operation on the implementor.
+    ///
+    /// In general, this should be the type you'd get by substituting `T` for
+    /// `U` in the implementing type &mdash; it may however also be wrapped in
+    /// `Option` if an empty collection is logically invalid.
+    type Output;
+
+    /// Produce a new version of the receiver by filtering its elements and
+    /// transforming the ones that are not discarded.
+    fn filter_map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> Option<U>;
+}
+
+/// Interface for applying the "map" operation to a collection.
+///
+/// This operation calls a closure on each element in the collection, creating
+/// a replacement element.
+pub trait Map<T, U> {
+    /// Type produced by the `map` operation on the implementor.
+    ///
+    /// In general, this should be the type you'd get by substituting `T` for
+    /// `U` in the implementing type.
+    type Output;
+
+    /// Produce a new version of the receiver by transforming its elements.
+    fn map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> U;
+}
+
+impl<T, U> Map<T, U> for Vec<T> {
+    type Output = Vec<U>;
+    fn map<F>(self, f: F) -> Self::Output
+        where F: Copy + Fn(T) -> U
+    {
+        self.into_iter().map(f).collect()
+    }
+}
+
 /// Interface for mapping between atom types in a pattern element.
 pub trait MapAtoms<T, U> where T: Atom, U: Atom {
     /// Type produced by the implementation.
