@@ -57,14 +57,20 @@ pub trait Transition: Actions + Clone + Debug + PartialEq {
 }
 
 /// Interface for automaton implementations
-pub trait Automaton<'a, A: 'a + Atom> {
-    /// Action type used by [`Actions`](trait.Actions.html) implementations on
-    /// [`State`](trait.State.html) and [`Transition`](state.Transition.html)
-    /// associated types.
-    type Action;
+pub trait Automaton<'a> {
+    /// Atom type.
+    type Atom: Atom;
+
+    /// Action type used by [`Actions`](trait.Actions.html) implementation on
+    /// [`State`](trait.State.html) associated type.
+    type StateAction;
+
+    /// Action type used by [`Actions`](trait.Actions.html) implementation on
+    /// [`Transition`](state.Transition.html) associated type.
+    type TransitionAction;
 
     /// Concrete type used to represent automaton states.
-    type State: StateMut<Action=Self::Action>;
+    type State: StateMut<Action=Self::StateAction>;
 
     /// Type used to identify individual states.
     type StateId: Id;
@@ -74,14 +80,14 @@ pub trait Automaton<'a, A: 'a + Atom> {
 
     /// Concrete type used to represent the possible atomic inputs that can
     /// trigger a transition.
-    type Input: 'a + Input<Atom=A>;
+    type Input: 'a + Input<Atom=Self::Atom>;
 
     /// Iterator over the possible inputs for a state.
     type InputsIter: Iterator<Item=&'a Self::Input>;
 
     /// Type used to store the input and any relevant metadata for a transition
     /// from one state to another.
-    type Transition: Transition<Input=Self::Input, Action=Self::Action>;
+    type Transition: Transition<Input=Self::Input, Action=Self::TransitionAction>;
 
     /// Type used to identify individual transitions.
     type TransitionId: Id;
@@ -123,23 +129,29 @@ pub trait Automaton<'a, A: 'a + Atom> {
 
     /// Get a reference to a specific transition.
     fn transition(&self, id: Self::TransitionId) -> &Self::Transition;
+
+    /// Fetch a transition's target state
+    fn transition_target(&self, id: Self::TransitionId) -> Self::StateId;
+
+    /// Fetch a transition's source state
+    fn transition_source(&self, id: Self::TransitionId) -> Self::StateId;
 }
 
 /// Interface for deterministic automatons.
-pub trait DeterministicAutomaton<'a, A: 'a + Atom>: Automaton<'a, A> {
+pub trait DeterministicAutomaton<'a>: Automaton<'a> {
     /// Determine the next state to which the DFA will transition given its
     /// current state and the input token.
-    fn next_state(&self, current_state: Self::StateId, input: A) -> Option<Self::StateId>;
+    fn next_state(&self, current_state: Self::StateId, input: Self::Atom) -> Option<Self::StateId>;
 }
 
 /// Interface for non-deterministic automatons.
-pub trait NondeterministicAutomaton<'a,A: 'a + Atom>: Automaton<'a, A> {
+pub trait NondeterministicAutomaton<'a>: Automaton<'a> {
     /// Iterator type returned by `next_states`.
     type NextStatesIter: Iterator<Item=Self::StateId>;
 
     /// Fetch an iterator over the set of states to which the automaton
     /// transitions on the given input.
-    fn next_states(&'a self, current_state: Self::StateId, input: A) -> Self::NextStatesIter;
+    fn next_states(&'a self, current_state: Self::StateId, input: Self::Atom) -> Self::NextStatesIter;
 }
 
 /// Interface for graph-based automata that support exposing their internal
